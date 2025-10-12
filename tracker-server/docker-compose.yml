@@ -1,0 +1,16 @@
+services:
+  tracker:
+    build: .
+    container_name: p2p-tracker
+    ports:
+      - "8000:8000"
+    volumes:
+      - redis-data:/data        # Persistent Redis storage
+      - .:/app               # Mount code read-only (optional)
+    restart: always
+    environment:
+      - PYTHONUNBUFFERED=1
+
+volumes:
+  redis-data:
+    name: redis-data

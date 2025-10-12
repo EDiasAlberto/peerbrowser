@@ -1,1 +1,47 @@
 ./venv
+
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# Virtual environment 
+venv/
+.env/
+.venv/
+opt/venv/
+
+# --- Redis Data (Persistence) ---
+redis-data/
+*.rdb
+*.aof
+dump.rdb
+appendonly.aof
+
+# --- Docker ---
+# Exclude build artifacts and named volumes
+/data/
+*.log
+*.pid
+
+# Docker-compose runtime metadata
+*.pid
+*.log
+
+# --- Editor & OS files ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# --- Python packaging 
+build/
+dist/
+*.egg-info/
+
+# --- Supervisor logs 
+logs/
