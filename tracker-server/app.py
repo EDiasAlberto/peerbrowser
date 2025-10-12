@@ -5,6 +5,21 @@ from datetime import datetime
 app = FastAPI()
 r = redis.Redis(host="localhost", port=6379, decode_responses=True)
 
+@app.get("/")
+def get_status():
+    return {"status": "ok"}
+
+@app.get("/all_trackers")
+def get_all_trackers():
+    iterator = r.scan_iter(count=10)
+    peers = []
+    for _ in range(10):
+        try:
+            peers.append(next(iterator))
+        except StopIteration:
+            break
+    return {"peers": peers}
+
 @app.get("/peers")
 def get_peers(filename: str):
     peers = r.smembers(f"file:{filename}")
