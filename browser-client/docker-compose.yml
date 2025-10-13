@@ -1,0 +1,7 @@
+services:
+  peernet-client:
+    build: .
+    container_name: peernet-client
+    ports:
+      - "5000:5000"
+    restart: unless-stopped
