@@ -83,18 +83,26 @@ def fetch_page():
     print(response)
     return f"<h3>Fetching <code>{page_dir}</code> from <code>{site_title}</code>...</h3>"
 
+def is_malicious_filepath(filepath: str):
+    has_dir_traversal = (filepath.index("..")) != -1
+    attempted_root_access = (filepath.strip()[0] == "/")
+    return has_dir_traversal or attempted_root_access
+
 def post_site_pages(project_name: str):
-    existing_pages = []
+    existing_or_malicious_pages = []
     for path, subdirs, files in os.walk(f"{MEDIA_DOWNLOAD_DIR}{project_name}"):
         for name in files:
             filepath = os.path.join(path, name).replace(MEDIA_DOWNLOAD_DIR, "")
+            if is_malicious_filepath(filepath):
+                existing_or_malicious_pages.append(filepath)
+                continue
             response = requests.get(TRACKER_SERVER_URL + f"/peers?filename={filepath}")
             if len(response.json()["peers"]) > 0:
-                existing_pages.append(filepath)
+                existing_or_malicious_pages.append(filepath)
                 continue
             response = requests.post(TRACKER_SERVER_URL + f"/add?filename={filepath}")
 
-    return existing_pages 
+    return existing_or_malicious_pages 
 
 @app.route("/publish", methods=["GET", "POST"])
 def publish():
@@ -160,11 +168,11 @@ def publish():
         website_name = request.form.get("websiteName")
         start_page = request.form.get("startPage", "index.html")
         # TODO: Implement logic to register or publish the site to the peernet
-        # TODO: Sanitise user directory input. Furthermore, generate hashes
+        # TODO: generate hashes
+        # TODO: Publish/update db with stored sites upon boot
 
         startpage_path = f"{website_name}/{start_page}"
         existing_pages = post_site_pages(website_name)
-
 
         outputText = f"<p>Publishing site <b>{website_name}</b> with start page <b>{start_page}</b>...</p>"
         if len(existing_pages) > 0:
