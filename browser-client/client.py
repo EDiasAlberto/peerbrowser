@@ -84,17 +84,17 @@ def fetch_page():
     return f"<h3>Fetching <code>{page_dir}</code> from <code>{site_title}</code>...</h3>"
 
 def post_site_pages(project_name: str):
-    website_files = []
+    existing_pages = []
     for path, subdirs, files in os.walk(f"{MEDIA_DOWNLOAD_DIR}{project_name}"):
         for name in files:
             filepath = os.path.join(path, name).replace(MEDIA_DOWNLOAD_DIR, "")
             response = requests.get(TRACKER_SERVER_URL + f"/peers?filename={filepath}")
-            if (response.json()["peers"]) > 0:
+            if len(response.json()["peers"]) > 0:
+                existing_pages.append(filepath)
                 continue
             response = requests.post(TRACKER_SERVER_URL + f"/add?filename={filepath}")
-            website_files.append(filepath)
 
-    return website_files
+    return existing_pages 
 
 @app.route("/publish", methods=["GET", "POST"])
 def publish():
@@ -163,8 +163,12 @@ def publish():
         # TODO: Sanitise user directory input. Furthermore, generate hashes
 
         startpage_path = f"{website_name}/{start_page}"
-        post_site_pages(website_name)
+        existing_pages = post_site_pages(website_name)
 
-        return f"<p>Publishing site <b>{website_name}</b> with start page <b>{start_page}</b>...</p>"
+
+        outputText = f"<p>Publishing site <b>{website_name}</b> with start page <b>{start_page}</b>...</p>"
+        if len(existing_pages) > 0:
+            outputText += f"<p>ERROR: These sites already existed: {existing_pages}</p>"
+        return outputText
 if __name__ == "__main__":
     app.run(debug=True, port=5000, host="0.0.0.0")
