@@ -83,11 +83,16 @@ def fetch_page():
     print(response)
     return f"<h3>Fetching <code>{page_dir}</code> from <code>{site_title}</code>...</h3>"
 
-def get_site_pages(project_name: str):
+def post_site_pages(project_name: str):
     website_files = []
     for path, subdirs, files in os.walk(f"{MEDIA_DOWNLOAD_DIR}{project_name}"):
         for name in files:
-            website_files.append(os.path.join(path, name).replace(MEDIA_DOWNLOAD_DIR, ""))
+            filepath = os.path.join(path, name).replace(MEDIA_DOWNLOAD_DIR, "")
+            response = requests.get(TRACKER_SERVER_URL + f"/peers?filename={filepath}")
+            if (response.json()["peers"]) > 0:
+                continue
+            response = requests.post(TRACKER_SERVER_URL + f"/add?filename={filepath}")
+            website_files.append(filepath)
 
     return website_files
 
@@ -157,13 +162,9 @@ def publish():
         # TODO: Implement logic to register or publish the site to the peernet
         # TODO: Sanitise user directory input. Furthermore, generate hashes
 
-        print(get_site_pages(website_name))
+        startpage_path = f"{website_name}/{start_page}"
+        post_site_pages(website_name)
 
-        filepath = f"{website_name}/{start_page}"
-        response = requests.get(TRACKER_SERVER_URL + f"/peers?filename={filepath}")
-        if len(response.json()["peers"]) > 0:
-            return f"<p> Site: <b>{website_name}</b> at page <b>{start_page}</b> already exists!"
-        response = requests.post(TRACKER_SERVER_URL + f"/add?filename={filepath}")
         return f"<p>Publishing site <b>{website_name}</b> with start page <b>{start_page}</b>...</p>"
 if __name__ == "__main__":
     app.run(debug=True, port=5000, host="0.0.0.0")

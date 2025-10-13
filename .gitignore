@@ -45,4 +45,4 @@ dist/
 logs/
 
 # --- Website downloads
-./browser-client/media/
+browser-client/media/
