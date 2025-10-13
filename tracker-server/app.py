@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 import redis
 from datetime import datetime
 
@@ -26,7 +26,8 @@ def get_peers(filename: str):
     return {"filename": filename, "peers": list(peers)}
 
 @app.post("/add")
-def add_mapping(ip: str, filename: str):
+def add_mapping(request: Request, filename: str):
+    ip = request.client.host
     r.sadd(f"file:{filename}", ip)
     r.sadd(f"ip:{ip}", filename)
     r.hset("peer:lastseen", ip, datetime.utcnow().isoformat())

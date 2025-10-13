@@ -1,6 +1,9 @@
 from flask import Flask, request, render_template_string, redirect, url_for
 import requests
+import os
 
+TRACKER_SERVER_URL = "http://trackers.ediasalberto.com"
+MEDIA_DOWNLOAD_DIR = "./media/"
 app = Flask(__name__)
 
 @app.route("/", methods=["GET"])
@@ -75,8 +78,92 @@ def fetch_page():
     page_dir = request.args.get("page_dir", "index.html")
 
     # TODO: your logic to query tracker + fetch file
+    filepath = site_title + "/" + page_dir
+    response = requests.get(TRACKER_SERVER_URL + f"/peers?filename={filepath}")
+    print(response)
     return f"<h3>Fetching <code>{page_dir}</code> from <code>{site_title}</code>...</h3>"
 
+def get_site_pages(project_name: str):
+    website_files = []
+    for path, subdirs, files in os.walk(f"{MEDIA_DOWNLOAD_DIR}{project_name}"):
+        for name in files:
+            website_files.append(os.path.join(path, name).replace(MEDIA_DOWNLOAD_DIR, ""))
 
+    return website_files
+
+@app.route("/publish", methods=["GET", "POST"])
+def publish():
+    if request.method == "GET":
+        return """
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <title>Publish to Peernet</title>
+            <style>
+                body {
+                    font-family: Arial, sans-serif;
+                    max-width: 600px;
+                    margin: 60px auto;
+                    padding: 20px;
+                    background: #fafafa;
+                    border-radius: 10px;
+                    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+                }
+                h1 { text-align: center; }
+                h3 { color: #555; font-weight: normal; }
+                label { display: block; margin-top: 15px; font-weight: bold; }
+                input[type=text] {
+                    width: 100%;
+                    padding: 10px;
+                    margin-top: 5px;
+                    border: 1px solid #ccc;
+                    border-radius: 5px;
+                }
+                input[type=submit] {
+                    margin-top: 20px;
+                    background-color: #0066cc;
+                    color: white;
+                    padding: 10px 20px;
+                    border: none;
+                    border-radius: 5px;
+                    cursor: pointer;
+                }
+                input[type=submit]:hover {
+                    background-color: #004d99;
+                }
+            </style>
+        </head>
+        <body>
+            <h1>Publish a Website to Peernet</h1>
+            <h3>Your local files will be fetched from <code>./media/{websiteName}/</code> (HTML, CSS, JS)</h3>
+            
+            <form action="/publish" method="POST">
+                <label for="websiteName">Website Name:</label>
+                <input type="text" id="websiteName" name="websiteName" placeholder="e.g. mycoolsite" required>
+                
+                <label for="startPage">Start Page (optional):</label>
+                <input type="text" id="startPage" name="startPage" placeholder="index.html" value="index.html">
+                
+                <input type="submit" value="Publish">
+            </form>
+        </body>
+        </html>
+        """
+
+    elif request.method == "POST":
+        website_name = request.form.get("websiteName")
+        start_page = request.form.get("startPage", "index.html")
+        # TODO: Implement logic to register or publish the site to the peernet
+        # TODO: Sanitise user directory input. Furthermore, generate hashes
+
+        print(get_site_pages(website_name))
+
+        filepath = f"{website_name}/{start_page}"
+        response = requests.get(TRACKER_SERVER_URL + f"/peers?filename={filepath}")
+        if len(response.json()["peers"]) > 0:
+            return f"<p> Site: <b>{website_name}</b> at page <b>{start_page}</b> already exists!"
+        response = requests.post(TRACKER_SERVER_URL + f"/add?filename={filepath}")
+        return f"<p>Publishing site <b>{website_name}</b> with start page <b>{start_page}</b>...</p>"
 if __name__ == "__main__":
     app.run(debug=True, port=5000, host="0.0.0.0")
