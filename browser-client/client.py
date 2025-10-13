@@ -1,6 +1,7 @@
 from flask import Flask, request, render_template_string, redirect, url_for
 import requests
 import os
+import hashlib
 
 TRACKER_SERVER_URL = "http://trackers.ediasalberto.com"
 MEDIA_DOWNLOAD_DIR = "./media/"
@@ -84,7 +85,7 @@ def fetch_page():
     return f"<h3>Fetching <code>{page_dir}</code> from <code>{site_title}</code>...</h3>"
 
 def is_malicious_filepath(filepath: str):
-    has_dir_traversal = (filepath.index("..")) != -1
+    has_dir_traversal = (filepath.find("..")) != -1
     attempted_root_access = (filepath.strip()[0] == "/")
     return has_dir_traversal or attempted_root_access
 
@@ -92,7 +93,10 @@ def post_site_pages(project_name: str):
     existing_or_malicious_pages = []
     for path, subdirs, files in os.walk(f"{MEDIA_DOWNLOAD_DIR}{project_name}"):
         for name in files:
-            filepath = os.path.join(path, name).replace(MEDIA_DOWNLOAD_DIR, "")
+            filepath = os.path.join(path, name)
+            hash = hashlib.md5(open(filepath, "rb").read()).hexdigest()
+            print(hash)
+            filepath = filepath.replace(MEDIA_DOWNLOAD_DIR, "")
             if is_malicious_filepath(filepath):
                 existing_or_malicious_pages.append(filepath)
                 continue
