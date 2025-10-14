@@ -172,7 +172,7 @@ def publish():
         website_name = request.form.get("websiteName")
         start_page = request.form.get("startPage", "index.html")
         # TODO: Implement logic to register or publish the site to the peernet
-        # TODO: generate hashes
+        # TODO: upload hashes
         # TODO: Publish/update db with stored sites upon boot
 
         startpage_path = f"{website_name}/{start_page}"

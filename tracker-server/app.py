@@ -26,10 +26,11 @@ def get_peers(filename: str):
     return {"filename": filename, "peers": list(peers)}
 
 @app.post("/add")
-def add_mapping(request: Request, filename: str):
+def add_mapping(request: Request, filename: str, hash:str):
     ip = request.client.host
     r.sadd(f"file:{filename}", ip)
     r.sadd(f"ip:{ip}", filename)
+    r.set(f"filehash:{filepath}", hash)
     r.hset("peer:lastseen", ip, datetime.utcnow().isoformat())
     return {"status": "ok"}
 
