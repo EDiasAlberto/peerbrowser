@@ -3,8 +3,14 @@ import requests
 import os
 import hashlib
 
+from holepunch_server import UDPPeerClient
+
 TRACKER_SERVER_URL = "http://trackers.ediasalberto.com"
 MEDIA_DOWNLOAD_DIR = "./media/"
+# DEFINE MATCHMAKER_HOST IN ENV
+
+udpClient = UDPPeerClient(listen_host="0.0.0.0", listen_port=50001, room="fileshare", client_id="A")
+udpClient.start()
 app = Flask(__name__)
 
 @app.route("/", methods=["GET"])
@@ -182,5 +188,6 @@ def publish():
         if len(existing_pages) > 0:
             outputText += f"<p>ERROR: These sites already existed: {existing_pages}</p>"
         return outputText
+
 if __name__ == "__main__":
     app.run(debug=True, port=5000, host="0.0.0.0")
