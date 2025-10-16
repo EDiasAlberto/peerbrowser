@@ -10,6 +10,7 @@ venv/
 .env/
 .venv/
 opt/venv/
+.env
 
 # --- Redis Data (Persistence) ---
 redis-data/
