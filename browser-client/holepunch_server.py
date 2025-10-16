@@ -1,179 +1,162 @@
 #!/usr/bin/env python3
-import os
+import argparse
 import json
 import socket
 import threading
 import time
+import sys
 
-KEEPALIVE_INTERVAL = 10
+KEEPALIVE_INTERVAL = 10.0
 
-class UDPPeerClient:
-    def __init__(self, listen_host='0.0.0.0', listen_port=0, room='default', client_id=None):
-        self.server_host = os.environ.get("MATCHMAKER_HOST")
-        self.server_port = int(os.environ.get("MATCHMAKER_PORT", 12345))
-        if not self.server_host:
-            raise ValueError("Environment variable MATCHMAKER_HOST must be set.")
-
-        self.server_addr = (self.server_host, self.server_port)
-        self.room = room
-        self.client_id = client_id
-        self.shared = {"peer": None}
-
-        self.lock = threading.Lock()
-        self.stop_event = threading.Event()
-        self.first_packet_event = threading.Event()
-        self.keep_running = threading.Event()
-        self.keep_running.set()
-
+class UDPClient:
+    def __init__(self, server_host: str, server_port: int):
+        self.server_addr = (server_host, int(server_port))
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.sock.bind((listen_host, listen_port))
-        print(f"Local socket bound to {self.sock.getsockname()}")
+        self.sock.bind(("", 0))
+        self.sock.settimeout(1.0)
 
-        self.recv_thread = None
+        self.peer_addr = None
+        self.peer_lock = threading.Lock()
+        self.alive = threading.Event()
+        self.alive.set()
+        self.listener_thread = threading.Thread(target=self._listen_loop, daemon=True)
         self.punch_thread = None
-        self.server_thread = None
 
     def start(self):
-        """Register with the matchmaking server and begin listening for assignments."""
-        self._register_with_server()
-        self.server_thread = threading.Thread(target=self._server_listener, daemon=True)
-        self.server_thread.start()
+        self.listener_thread.start()
+        self.register_with_server()
 
     def stop(self):
-        """Stop all threads and close the socket."""
-        self.stop_event.set()
-        self.keep_running.clear()
-        self.sock.close()
-        for thread in [self.recv_thread, self.punch_thread, self.server_thread]:
-            if thread and thread.is_alive():
-                thread.join(timeout=1)
-        print("Client stopped.")
-
-    def send_message(self, message: dict):
-        """Send a JSON message to the connected peer."""
-        with self.lock:
-            peer = self.shared.get("peer")
-        if peer:
-            try:
-                self.sock.sendto(json.dumps(message).encode("utf-8"), peer)
-            except Exception as e:
-                print("Error sending message:", e)
-        else:
-            print("No peer known yet.")
-
-    def request_connection(self, target_id: str):
-        """Ask the server to connect this client with another by ID."""
-        msg = {"type": "connect", "target": target_id}
+        self.alive.clear()
+        if self.listener_thread.is_alive():
+            self.listener_thread.join(timeout=1)
+        if self.punch_thread and self.punch_thread.is_alive():
+            self.punch_thread.join(timeout=1)
         try:
-            self.sock.sendto(json.dumps(msg).encode("utf-8"), self.server_addr)
-            print(f"Requested connection with {target_id}")
-        except Exception as e:
-            print("Error requesting connection:", e)
+            self.sock.close()
+        except Exception:
+            pass
 
-    def wait_for_peer(self, timeout=None):
-        """Block until a direct connection is established."""
-        return self.first_packet_event.wait(timeout=timeout)
+    def register_with_server(self):
+        msg = {"type": "register"}
+        self.sock.sendto(json.dumps(msg).encode(), self.server_addr)
+        print(f"[i] Sent register to {self.server_addr}")
 
-    # Internal methods --------------------------------------------------
+    def request_connect(self, target_ip: str):
+        msg = {"type": "connect", "target_ip": target_ip}
+        self.sock.sendto(json.dumps(msg).encode(), self.server_addr)
+        print(f"[i] Sent connect request for {target_ip} to server")
 
-    def _register_with_server(self):
-        msg = {"type": "register", "room": self.room}
-        if self.client_id:
-            msg["client_id"] = self.client_id
-        self.sock.sendto(json.dumps(msg).encode("utf-8"), self.server_addr)
-        print(f"Registered with server {self.server_addr} in room '{self.room}'")
+    def send_text_to_peer(self, text: str):
+        with self.peer_lock:
+            peer = self.peer_addr
+        if not peer:
+            print("[!] No peer known.")
+            return
+        payload = {"type": "msg", "msg": text, "t": time.time()}
+        self.sock.sendto(json.dumps(payload).encode(), peer)
+        print(f"[->] {peer}: {text}")
 
-    def _server_listener(self):
-        """Wait for peer assignment or control messages from the server."""
-        self.sock.settimeout(1.0)
-        while not self.stop_event.is_set():
+    def _listen_loop(self):
+        while self.alive.is_set():
             try:
                 data, addr = self.sock.recvfrom(4096)
             except socket.timeout:
                 continue
-            except OSError:
+            except Exception:
                 break
 
-            if addr != self.server_addr:
-                # May be a packet from the peer
-                with self.lock:
-                    peer = self.shared.get("peer")
-                if peer and addr == peer:
-                    self._handle_peer_data(data, addr)
-                continue
-
-            # Message from server
             try:
-                msg = json.loads(data.decode("utf-8"))
+                parsed = json.loads(data.decode("utf-8"))
             except Exception:
+                parsed = None
+
+            if parsed and addr == self.server_addr:
+                t = parsed.get("type")
+                if t == "your_addr":
+                    print(f"[i] Your external address: {parsed['addr']}")
+                elif t == "peer":
+                    p = parsed.get("peer")
+                    if p:
+                        with self.peer_lock:
+                            self.peer_addr = (p[0], int(p[1]))
+                        print(f"[i] Connected to peer {self.peer_addr}")
+                        self._start_punching()
+                elif t == "error":
+                    print(f"[server error] {parsed.get('msg')}")
                 continue
 
-            mtype = msg.get("type")
+            with self.peer_lock:
+                peer = self.peer_addr
+            if peer and addr == peer:
+                try:
+                    m = json.loads(data.decode("utf-8"))
+                    if m.get("type") == "msg":
+                        print(f"[<-] {m['msg']}")
+                    else:
+                        print(f"[<-] {m}")
+                except Exception:
+                    print(f"[<- RAW] {data!r}")
+            else:
+                print(f"[?] From {addr}: {data!r}")
 
-            if mtype == "peer":
-                peer = tuple(msg.get("peer"))
-                with self.lock:
-                    self.shared["peer"] = peer
-                print(f"Received peer info from server: {peer}")
-                self._start_peer_threads()
-
-            elif mtype == "wait":
-                print("Server: waiting for another client...")
-
-            elif mtype == "info":
-                print("Server message:", msg.get("msg"))
-
-    def _start_peer_threads(self):
-        """Start peer communication threads once peer info is known."""
-        if self.recv_thread and self.recv_thread.is_alive():
+    def _start_punching(self):
+        if self.punch_thread and self.punch_thread.is_alive():
             return
-        self.recv_thread = threading.Thread(target=self._recv_loop, daemon=True)
         self.punch_thread = threading.Thread(target=self._punch_loop, daemon=True)
-        self.recv_thread.start()
         self.punch_thread.start()
 
-    def _recv_loop(self):
-        """Handle incoming UDP packets."""
-        self.sock.settimeout(1.0)
-        while not self.stop_event.is_set():
-            try:
-                data, addr = self.sock.recvfrom(4096)
-            except socket.timeout:
-                continue
-            except OSError:
-                break
-
-            with self.lock:
-                peer = self.shared.get("peer")
-
-            if peer and addr == peer:
-                self._handle_peer_data(data, addr)
-            else:
-                continue
-
-    def _handle_peer_data(self, data, addr):
-        """Process peer data."""
-        try:
-            parsed = json.loads(data.decode("utf-8"))
-            print(f"Peer -> {addr}: {parsed}")
-        except Exception:
-            print(f"Peer -> {addr}: RAW {data!r}")
-
-        if not self.first_packet_event.is_set():
-            self.first_packet_event.set()
-            print("=== Direct connection established ===")
-
     def _punch_loop(self):
-        """Maintain NAT mapping with periodic UDP packets."""
-        while self.keep_running.is_set():
-            with self.lock:
-                peer = self.shared.get("peer")
-            if peer:
-                try:
-                    payload = json.dumps({"type": "punch", "t": time.time()})
-                    self.sock.sendto(payload.encode("utf-8"), peer)
-                    self.sock.sendto(b'\x00', peer)
-                except Exception as e:
-                    print("Error punching peer:", e)
+        while self.alive.is_set():
+            with self.peer_lock:
+                peer = self.peer_addr
+            if not peer:
+                time.sleep(1)
+                continue
+            try:
+                payload = {"type": "punch", "t": time.time()}
+                self.sock.sendto(json.dumps(payload).encode(), peer)
+                self.sock.sendto(b"\x00", peer)
+            except Exception as e:
+                print("[!] Punch error:", e)
             time.sleep(KEEPALIVE_INTERVAL)
+
+
+def repl(client):
+    print("Commands:\n  connect <ip>\n  show\n  quit\n  help\n[Any other text sends to peer]")
+    while True:
+        try:
+            line = input("> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\n[i] Exiting.")
+            break
+        if not line:
+            continue
+        parts = line.split()
+        cmd = parts[0].lower()
+        if cmd == "connect" and len(parts) == 2:
+            client.request_connect(parts[1])
+        elif cmd == "show":
+            with client.peer_lock:
+                print(f"[i] Peer: {client.peer_addr}")
+        elif cmd == "help":
+            print("Commands:\n  connect <ip>\n  show\n  quit\n  help")
+        elif cmd == "quit":
+            break
+        else:
+            client.send_text_to_peer(line)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--server", required=True)
+    parser.add_argument("--port", type=int, default=3478)
+    args = parser.parse_args()
+
+    c = UDPClient(args.server, args.port)
+    c.start()
+    try:
+        repl(c)
+    finally:
+        c.stop()
+        sys.exit(0)

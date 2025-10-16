@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """
-Simple UDP matchmaking server for peer-to-peer hole punching.
+UDP rendezvous server for NAT hole punching.
+No client IDs, only IPs and ports are used.
 
-Protocol (JSON over UDP):
-
+Protocol:
 Client -> Server:
-    {"type": "register", "client_id": "unique-id"}
-    {"type": "connect", "target_id": "peer-id"}
+    {"type": "register"}
+    {"type": "connect", "target": ["ip", port]}
 
 Server -> Client:
     {"type": "your_addr", "addr": ["ip", port]}
-    {"type": "peer", "peer": ["peer_ip", peer_port], "peer_id": "peer-id"}
+    {"type": "peer", "peer": ["ip", port]}
     {"type": "error", "msg": "description"}
 """
 
@@ -20,12 +20,13 @@ import socket
 import threading
 import time
 
-clients = {}  # client_id -> (addr, last_seen)
+clients = {}  # (ip, port) -> last_seen_time
 lock = threading.Lock()
+
 
 def handle_packet(data, addr, sock):
     try:
-        msg = json.loads(data.decode('utf-8'))
+        msg = json.loads(data.decode())
     except Exception:
         return
 
@@ -33,39 +34,36 @@ def handle_packet(data, addr, sock):
     msg_type = msg.get("type")
 
     if msg_type == "register":
-        client_id = msg.get("client_id")
-        if not client_id:
-            return
         with lock:
-            clients[client_id] = (addr, now)
-        your_msg = {"type": "your_addr", "addr": [addr[0], addr[1]]}
-        sock.sendto(json.dumps(your_msg).encode(), addr)
+            clients[addr] = now
+        reply = {"type": "your_addr", "addr": [addr[0], addr[1]]}
+        sock.sendto(json.dumps(reply).encode(), addr)
 
     elif msg_type == "connect":
-        target_id = msg.get("target_id")
-        client_id = msg.get("client_id")
-        if not target_id or not client_id:
-            return
-
-        with lock:
-            src = clients.get(client_id)
-            dst = clients.get(target_id)
-
-        if not dst:
-            err = {"type": "error", "msg": "target not found or offline"}
+        target = msg.get("target")
+        if not target or len(target) != 2:
+            err = {"type": "error", "msg": "invalid target"}
             sock.sendto(json.dumps(err).encode(), addr)
             return
 
-        src_addr, _ = src
-        dst_addr, _ = dst
+        target_ip, target_port = target
+        target_addr = (target_ip, int(target_port))
 
-        msg_to_src = {"type": "peer", "peer": [dst_addr[0], dst_addr[1]], "peer_id": target_id}
-        msg_to_dst = {"type": "peer", "peer": [src_addr[0], src_addr[1]], "peer_id": client_id}
+        with lock:
+            active_clients = list(clients.keys())
 
-        sock.sendto(json.dumps(msg_to_src).encode(), src_addr)
-        sock.sendto(json.dumps(msg_to_dst).encode(), dst_addr)
+        if target_addr not in active_clients:
+            err = {"type": "error", "msg": "target not found or inactive"}
+            sock.sendto(json.dumps(err).encode(), addr)
+            return
 
-        print(f"Connected {client_id} ({src_addr}) <--> {target_id} ({dst_addr})")
+        msg_to_src = {"type": "peer", "peer": [target_ip, int(target_port)]}
+        msg_to_dst = {"type": "peer", "peer": [addr[0], addr[1]]}
+
+        sock.sendto(json.dumps(msg_to_src).encode(), addr)
+        sock.sendto(json.dumps(msg_to_dst).encode(), target_addr)
+
+        print(f"Linked {addr} <--> {target_addr}")
 
     else:
         err = {"type": "error", "msg": "unknown message type"}
@@ -77,11 +75,11 @@ def cleanup_loop():
         time.sleep(30)
         cutoff = time.time() - 120
         with lock:
-            to_delete = [cid for cid, (_, t) in clients.items() if t < cutoff]
-            for cid in to_delete:
-                del clients[cid]
-        if to_delete:
-            print(f"Cleaned up {len(to_delete)} inactive clients.")
+            inactive = [a for a, t in clients.items() if t < cutoff]
+            for a in inactive:
+                del clients[a]
+        if inactive:
+            print(f"Cleaned {len(inactive)} stale clients")
 
 
 def run_server(host, port):
@@ -96,7 +94,7 @@ def run_server(host, port):
             data, addr = sock.recvfrom(4096)
             threading.Thread(target=handle_packet, args=(data, addr, sock), daemon=True).start()
     except KeyboardInterrupt:
-        print("Shutting down server.")
+        print("Shutting down.")
     finally:
         sock.close()
 
