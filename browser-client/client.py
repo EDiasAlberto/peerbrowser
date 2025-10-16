@@ -1,15 +1,17 @@
 from flask import Flask, request, render_template_string, redirect, url_for
+from dotenv import load_dotenv
 import requests
 import os
 import hashlib
 
-from holepunch_server import UDPPeerClient
+from holepunch_server import UDPClient
 
 TRACKER_SERVER_URL = "http://trackers.ediasalberto.com"
 MEDIA_DOWNLOAD_DIR = "./media/"
 # DEFINE MATCHMAKER_HOST IN ENV
 
-udpClient = UDPPeerClient(listen_host="0.0.0.0", listen_port=50001, room="fileshare", client_id="A")
+load_dotenv()
+udpClient = UDPClient(server_host=os.getenv("MATCHMAKER_HOST"), server_port=os.getenv("MATCHMAKER_PORT"))
 udpClient.start()
 app = Flask(__name__)
 
