@@ -188,7 +188,7 @@ def publish():
 
         outputText = f"<p>Publishing site <b>{website_name}</b> with start page <b>{start_page}</b>...</p>"
         if len(existing_pages) > 0:
-            outputText += f"<p>ERROR: These sites already existed: {existing_pages}</p>"
+            outputText += f"<p>WARN: These sites already existed (and so skipped upload): {existing_pages}</p>"
         return outputText
 
 if __name__ == "__main__":
