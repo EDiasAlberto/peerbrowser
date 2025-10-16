@@ -80,6 +80,23 @@ def network_load():
     """
     return render_template_string(html_form)
 
+def download_page(domain: str, page: str):
+    # get peers for a given {domain}/{page}
+    # request UDP hole for first returned IP
+    # receive html file line-by-line, write output to file
+    # peer ends connection once file transfer complete
+    # scan file for imported css or js
+    # request and download similarly
+    filepath = os.path.join(site_title, page_dir) 
+    res = requests.get(TRACKER_SERVER_URL + f"/peers?filename={filepath}")
+    if res:
+        peers = res["peers"]
+        for peer in peers:
+            udpClient.request_connect(peer)
+            udpClient.request_file(filepath)
+    else:
+        print("ERROR: no peers for file")
+
 
 @app.route("/get-page", methods=["GET"])
 def fetch_page():
@@ -87,6 +104,7 @@ def fetch_page():
     page_dir = request.args.get("page_dir", "index.html")
 
     # TODO: your logic to query tracker + fetch file
+    download_page(site_title, page_dir)
     filepath = site_title + "/" + page_dir
     response = requests.get(TRACKER_SERVER_URL + f"/peers?filename={filepath}")
     print(response)

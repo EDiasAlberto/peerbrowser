@@ -49,6 +49,20 @@ class UDPClient:
         self.sock.sendto(json.dumps(msg).encode(), self.server_addr)
         print(f"[i] Sent connect request for {target_ip} to server")
 
+    def _generate_nonce(length=8):
+        return ''.join([str(random.randint(0, 9)) for i in range(length)])
+
+    def send_file_request(self, filepath: str):
+        with self.peer_lock:
+            peer = self.peer_addr
+        if not peer:
+            print("[!] No peer known.")
+            return
+        nonce = self._generate_nonce()
+        payload = {"type": "file_request", "filepath": filepath, "nonce": nonce}
+        self.sock.sendto(json.dumps(payload).encode(), peer)
+        print(f"[->] Requested {file} from {peer}")
+
     def send_text_to_peer(self, text: str):
         with self.peer_lock:
             peer = self.peer_addr
@@ -78,6 +92,17 @@ class UDPClient:
                 print(f"[i] Disconnected from peer {self.peer_addr}")
             self.peer_addr = None
         self.punch_alive.clear()
+
+    def _handle_file_request(self, request):
+        with self.peer_lock:
+            peer = self.peer_addr
+        if not peer:
+            print("[!] No peer known.")
+            return
+        filepath = request.get("filepath")
+        nonce = request.get("nonce")
+        print(f"Received request for file {filepath}, nonce {nonce}, from peer {peer}")
+        return
 
     def _listen_loop(self):
         while self.alive.is_set():
@@ -122,6 +147,16 @@ class UDPClient:
                 elif t == "punch":
                     # silent heartbeat
                     pass
+                elif t == "file_request":
+                    self._handle_file_request(parsed)
+                elif t == "file_response":
+                    print("Received file!")
+                elif t == "file_chunk":
+                    print("RECEIVED FILE CHUNK")
+                elif t == "file_ack":
+                    print("PEER RECEIVED FILE")
+                elif t== "file_done":
+                    print("PEER COMPLETED TRANSFER, CHECK HASH")
                 else:
                     print(f"[<-] {parsed}")
             else:
