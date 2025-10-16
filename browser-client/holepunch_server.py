@@ -21,6 +21,7 @@ class UDPClient:
         self.alive.set()
         self.listener_thread = threading.Thread(target=self._listen_loop, daemon=True)
         self.punch_thread = None
+        self.punch_alive = threading.Event()
 
     def start(self):
         self.listener_thread.start()
@@ -28,6 +29,7 @@ class UDPClient:
 
     def stop(self):
         self.alive.clear()
+        self.punch_alive.clear()
         if self.listener_thread.is_alive():
             self.listener_thread.join(timeout=1)
         if self.punch_thread and self.punch_thread.is_alive():
@@ -57,6 +59,26 @@ class UDPClient:
         self.sock.sendto(json.dumps(payload).encode(), peer)
         print(f"[->] {peer}: {text}")
 
+    def disconnect_peer(self):
+        """Gracefully disconnect from current peer"""
+        with self.peer_lock:
+            peer = self.peer_addr
+            if not peer:
+                print("[!] No active connection.")
+                return
+            payload = {"type": "disconnect"}
+            self.sock.sendto(json.dumps(payload).encode(), peer)
+            print(f"[i] Sent disconnect to {peer}")
+            self._handle_disconnect()
+
+    def _handle_disconnect(self):
+        """Handle local disconnection logic"""
+        with self.peer_lock:
+            if self.peer_addr:
+                print(f"[i] Disconnected from peer {self.peer_addr}")
+            self.peer_addr = None
+        self.punch_alive.clear()
+
     def _listen_loop(self):
         while self.alive.is_set():
             try:
@@ -71,6 +93,7 @@ class UDPClient:
             except Exception:
                 parsed = None
 
+            # Messages from server
             if parsed and addr == self.server_addr:
                 t = parsed.get("type")
                 if t == "your_addr":
@@ -86,28 +109,38 @@ class UDPClient:
                     print(f"[server error] {parsed.get('msg')}")
                 continue
 
+            # Messages from peer
             with self.peer_lock:
                 peer = self.peer_addr
             if peer and addr == peer:
-                try:
-                    m = json.loads(data.decode("utf-8"))
-                    if m.get("type") == "msg":
-                        print(f"[<-] {m['msg']}")
-                    else:
-                        print(f"[<-] {m}")
-                except Exception:
-                    print(f"[<- RAW] {data!r}")
+                t = parsed.get("type") if parsed else None
+                if t == "msg":
+                    print(f"[<-] {parsed['msg']}")
+                elif t == "disconnect":
+                    print("[i] Peer disconnected.")
+                    self._handle_disconnect()
+                elif t == "punch":
+                    # silent heartbeat
+                    pass
+                else:
+                    print(f"[<-] {parsed}")
             else:
-                print(f"[?] From {addr}: {data!r}")
+                # Ignore unrelated packets
+                pass
 
     def _start_punching(self):
         if self.punch_thread and self.punch_thread.is_alive():
+            self.punch_alive.set()
             return
+        self.punch_alive.set()
         self.punch_thread = threading.Thread(target=self._punch_loop, daemon=True)
         self.punch_thread.start()
 
     def _punch_loop(self):
         while self.alive.is_set():
+            self.punch_alive.wait()
+            if not self.alive.is_set():
+                break
             with self.peer_lock:
                 peer = self.peer_addr
             if not peer:
@@ -123,7 +156,14 @@ class UDPClient:
 
 
 def repl(client):
-    print("Commands:\n  connect <ip>\n  show\n  quit\n  help\n[Any other text sends to peer]")
+    print(
+        "Commands:\n"
+        "  connect <ip>  — connect to a peer by IP\n"
+        "  show          — show current peer\n"
+        "  disconnect    — terminate current connection\n"
+        "  quit          — exit\n"
+        "[Any other text is sent to peer]"
+    )
     while True:
         try:
             line = input("> ").strip()
@@ -139,8 +179,8 @@ def repl(client):
         elif cmd == "show":
             with client.peer_lock:
                 print(f"[i] Peer: {client.peer_addr}")
-        elif cmd == "help":
-            print("Commands:\n  connect <ip>\n  show\n  quit\n  help")
+        elif cmd == "disconnect":
+            client.disconnect_peer()
         elif cmd == "quit":
             break
         else:
