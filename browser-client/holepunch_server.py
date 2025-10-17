@@ -8,6 +8,7 @@ import random
 import sys
 
 from client import generate_hash
+from transfer_classes import create_inbound, create_outbound, get_inbound, get_outbound, remove_inbound, remove_outbound
 
 KEEPALIVE_INTERVAL = 10.0
 
@@ -113,8 +114,10 @@ class UDPClient:
         # 5) wait for "file_accepted"
         # 6) close connection
         filehash = generate_hash(filepath)
-        chunk_data = get_chunk(filepath, seqNum) #TODO: NEED TO DEFINE
-        response_payload = {"type": "file_response", "hash": filehash, "chunk": chunk_data}
+        transfer = create_outbound(nonce=nonce, filepath=filepath)
+        with transfer.lock:
+            chunk_data = transfer.chunks[0]
+        response_payload = {"type": "file_response", "hash": filehash, "chunk": chunk_data, "nonce": nonce, "filename": filepath, "single_chunk": False}
         self.sock.sendto(json.dumps(payload).encode(), peer)
         return
 
@@ -125,7 +128,16 @@ class UDPClient:
             print("[!] Error, no peer known")
             return  
 
-        print("[!] Received file response")
+        hash = request.get("filehash")
+        initial_chunk = request.get("chunk_data")
+        nonce = request.get("nonce")
+        filename = request.get("filename")
+        is_last = request.get("single_chunk")
+        transfer = create_inbound(nonce=nonce, filename=filename)
+        with transfer.lock:
+            transfer.add_chunk(seq=0, data=initial_chunk, is_last=is_last)
+        response_payload = {"type": "file_ack", "seq": 0, "nonce": nonce, "filename": filename}
+        self.sock.sendto(json.dumps(payload).encode(), peer)
         return
         
 

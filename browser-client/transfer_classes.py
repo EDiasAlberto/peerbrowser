@@ -141,7 +141,7 @@ def remove_inbound(nonce: str):
     with inbound_lock:
         inbound_transfers.pop(nonce, None)
 
-def create_outbound(nonce: str, filepath: str, data_bytes: bytes, chunk_size: int = 1200) -> OutboundTransfer:
+def create_outbound(nonce: str, filepath: str, chunk_size: int = 1200) -> OutboundTransfer:
     t = OutboundTransfer(nonce=nonce, filepath=filepath, chunk_size=chunk_size)
     with outbound_lock:
         outbound_transfers[nonce] = t
