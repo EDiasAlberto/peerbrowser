@@ -7,6 +7,8 @@ import time
 import random
 import sys
 
+from client import generate_hash
+
 KEEPALIVE_INTERVAL = 10.0
 
 class UDPClient:
@@ -103,7 +105,30 @@ class UDPClient:
         filepath = request.get("filepath")
         nonce = request.get("nonce")
         print(f"Received request for file {filepath}, nonce {nonce}, from peer {peer}")
+        # outline of process
+        # 1) send "file_response" with hash of file, and initial chunk 
+        # 2) send chunk + seq of file, await ack
+        # 3) repeat for all chunks 
+        # 4) send "file_done" with final chunk and seq number
+        # 5) wait for "file_accepted"
+        # 6) close connection
+        filehash = generate_hash(filepath)
+        chunk_data = get_chunk(filepath, seqNum) #TODO: NEED TO DEFINE
+        response_payload = {"type": "file_response", "hash": filehash, "chunk": chunk_data}
+        self.sock.sendto(json.dumps(payload).encode(), peer)
         return
+
+    def _handle_file_response(self, request):
+        with self.peer_lock:
+            peer = self.peer_addr
+        if not peer:
+            print("[!] Error, no peer known")
+            return  
+
+        print("[!] Received file response")
+        return
+        
+
 
     def _listen_loop(self):
         while self.alive.is_set():
@@ -151,13 +176,15 @@ class UDPClient:
                 elif t == "file_request":
                     self._handle_file_request(parsed)
                 elif t == "file_response":
-                    print("Received file!")
+                    self._handle_file_response(parsed)
                 elif t == "file_chunk":
                     print("RECEIVED FILE CHUNK")
                 elif t == "file_ack":
                     print("PEER RECEIVED FILE")
                 elif t== "file_done":
                     print("PEER COMPLETED TRANSFER, CHECK HASH")
+                elif t=="file_accepted":
+                    print("PEER VALIDATED FILE, CLOSE CONNECTION")
                 else:
                     print(f"[<-] {parsed}")
             else:

@@ -118,12 +118,15 @@ def is_malicious_filepath(filepath: str):
     attempted_root_access = (filepath.strip()[0] == "/")
     return has_dir_traversal or attempted_root_access
 
+def generate_hash(filepath: str) -> str:
+    return hashlib.md5(open(filepath, "rb").read()).hexdigest()
+
 def post_site_pages(project_name: str):
     existing_or_malicious_pages = []
     for path, subdirs, files in os.walk(f"{MEDIA_DOWNLOAD_DIR}{project_name}"):
         for name in files:
             filepath = os.path.join(path, name)
-            hash = hashlib.md5(open(filepath, "rb").read()).hexdigest()
+            hash = generate_hash(filepath) 
             filepath = filepath.replace(MEDIA_DOWNLOAD_DIR, "")
             if is_malicious_filepath(filepath):
                 existing_or_malicious_pages.append(filepath)
