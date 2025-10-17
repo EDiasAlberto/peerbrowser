@@ -201,12 +201,12 @@ class UDPClient:
             transfer.add_chunk(seq=seq, data=data, is_last=is_last)
             bytes = transfer.assemble()
 
-            if !transfer.has_all_chunks():
+            if not transfer.has_all_chunks():
                 print("[!] DOES NOT HAVE ALL CHUNKS")
                 # re-request missing chunks
                 return
 
-            if !transfer.validate_hash(bytes):
+            if not transfer.validate_hash(bytes):
                 print("[!] ERROR WITH FILE INTEGRITY")
                 # re-attempt file transfer
                 return
