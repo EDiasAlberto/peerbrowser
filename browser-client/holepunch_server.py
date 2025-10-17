@@ -136,10 +136,28 @@ class UDPClient:
         transfer = create_inbound(nonce=nonce, filename=filename)
         with transfer.lock:
             transfer.add_chunk(seq=0, data=initial_chunk, is_last=is_last)
-        response_payload = {"type": "file_ack", "seq": 0, "nonce": nonce, "filename": filename}
+        response_payload = {"type": "file_ack", "seq": 0, "nonce": nonce }
         self.sock.sendto(json.dumps(payload).encode(), peer)
         return
         
+    def _handle_file_ack(self, request):
+        with self.peer_lock:
+            peer = self.peer_addr
+        if not peer:
+            print("[!] Error, peer not known")
+            return
+
+        seq = request.get(seq)
+        nonce = request.get(nonce)
+        transfer = get_outbound(nonce=nonce)
+        transfer.mark_acked(seq)
+        with transfer.lock:
+            data = transfer.chunks[seq+1]
+        transfer_payload = {"type": "file_chunk", "seq": seq+1, "nonce": nonce, "data": data}
+        self.sock.sendto(json.dumps(payload).encode(), peer)
+        return
+
+
 
 
     def _listen_loop(self):
@@ -192,7 +210,7 @@ class UDPClient:
                 elif t == "file_chunk":
                     print("RECEIVED FILE CHUNK")
                 elif t == "file_ack":
-                    print("PEER RECEIVED FILE")
+                    self._handle_file_ack(parsed)
                 elif t== "file_done":
                     print("PEER COMPLETED TRANSFER, CHECK HASH")
                 elif t=="file_accepted":
