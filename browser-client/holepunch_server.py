@@ -7,7 +7,7 @@ import time
 import random
 import sys
 
-from utils import generate_hash
+from utils import generate_hash, MEDIA_DOWNLOAD_DIR
 from transfer_classes import create_inbound, create_outbound, get_inbound, get_outbound, remove_inbound, remove_outbound
 
 KEEPALIVE_INTERVAL = 10.0
@@ -195,7 +195,9 @@ class UDPClient:
         data = request.get(data)
         is_last = request.get(is_last)
         transfer = get_inbound(nonce=nonce)
+        bytes = b""
         with transfer.lock:
+            filepath = transfer.filename
             transfer.add_chunk(seq=seq, data=data, is_last=is_last)
             bytes = transfer.assemble()
 
@@ -208,6 +210,15 @@ class UDPClient:
                 print("[!] ERROR WITH FILE INTEGRITY")
                 # re-attempt file transfer
                 return
+        payload = {"type": "file_complete", "nonce": nonce}
+        self.sock.sendto(json.dumps(payload).encode(), peer)
+        #write bytes buffer to file
+        targetFilepath = os.path.join(MEDIA_DOWNLOAD_DIR, filepath)
+        with open(targetFilepath, "wb") as target:
+            target.write(bytes)
+        return
+            
+        
 
     def _listen_loop(self):
         while self.alive.is_set():
@@ -262,7 +273,7 @@ class UDPClient:
                     self._handle_file_ack(parsed)
                 elif t== "file_done":
                     self._handle_file_done(parsed)
-                elif t=="file_accepted":
+                elif t=="file_complete":
                     print("PEER VALIDATED FILE, CLOSE CONNECTION")
                 else:
                     print(f"[<-] {parsed}")

@@ -5,12 +5,9 @@ import os
 import hashlib
 import time #temporary solutoin
 
-from utils import generate_hash
+from utils import generate_hash, TRACKER_SERVER_URL, MEDIA_DOWNLOAD_DIR
 from holepunch_server import UDPClient
 
-TRACKER_SERVER_URL = "http://trackers.ediasalberto.com"
-MEDIA_DOWNLOAD_DIR = "./media/"
-# DEFINE MATCHMAKER_HOST IN ENV
 
 load_dotenv()
 udpClient = UDPClient(server_host=os.getenv("MATCHMAKER_HOST"), server_port=os.getenv("MATCHMAKER_PORT"))
