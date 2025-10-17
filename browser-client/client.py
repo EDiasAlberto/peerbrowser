@@ -5,6 +5,7 @@ import os
 import hashlib
 import time #temporary solutoin
 
+from utils import generate_hash
 from holepunch_server import UDPClient
 
 TRACKER_SERVER_URL = "http://trackers.ediasalberto.com"
@@ -118,8 +119,6 @@ def is_malicious_filepath(filepath: str):
     attempted_root_access = (filepath.strip()[0] == "/")
     return has_dir_traversal or attempted_root_access
 
-def generate_hash(filepath: str) -> str:
-    return hashlib.md5(open(filepath, "rb").read()).hexdigest()
 
 def post_site_pages(project_name: str):
     existing_or_malicious_pages = []

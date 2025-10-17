@@ -7,7 +7,7 @@ import time
 import random
 import sys
 
-from client import generate_hash
+from utils import generate_hash
 from transfer_classes import create_inbound, create_outbound, get_inbound, get_outbound, remove_inbound, remove_outbound
 
 KEEPALIVE_INTERVAL = 10.0
@@ -175,7 +175,7 @@ class UDPClient:
         with transfer.lock:
             data = transfer.chunks[seq+1]
             total_chunks = transfer.total_chunks
-        is_last = seq+1 = total_chunks
+        is_last = (seq+1 == total_chunks)
         #index of last chunk == length of chunks list
         transfer_payload = {"type": "file_chunk", "seq": seq+1, "nonce": nonce, "data": data, "is_last": is_last}
         self.sock.sendto(json.dumps(payload).encode(), peer)
