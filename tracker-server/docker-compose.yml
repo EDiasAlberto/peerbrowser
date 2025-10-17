@@ -3,10 +3,11 @@ services:
     build: .
     container_name: p2p-tracker
     ports:
-      - "8000:8000"
+      - "8000:8000"              # FastAPI tracker HTTP
+      - "12345:12345/udp"        # Matchmaker UDP for NAT hole punching
     volumes:
-      - redis-data:/data        # Persistent Redis storage
-      - .:/app               # Mount code read-only (optional)
+      - redis-data:/data         # Persistent Redis storage
+      - .:/app                   # Mount code read-only (optional)
     restart: always
     environment:
       - PYTHONUNBUFFERED=1

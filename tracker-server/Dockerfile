@@ -18,6 +18,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy app and configs
 COPY app.py .
+COPY matchmaker.py .
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY redis.conf /etc/redis/redis.conf
 
@@ -25,6 +26,7 @@ COPY redis.conf /etc/redis/redis.conf
 RUN mkdir -p /data && chown redis:redis /data
 
 EXPOSE 8000
+EXPOSE 12345/udp
 
 # Run both Redis and FastAPI via Supervisor
 CMD ["/usr/bin/supervisord"]
