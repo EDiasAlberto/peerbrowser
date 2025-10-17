@@ -47,3 +47,5 @@ logs/
 
 # --- Website downloads
 browser-client/media/
+tempfile
+

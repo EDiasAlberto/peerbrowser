@@ -124,7 +124,7 @@ class UDPClient:
             chunk_count = transfer.total_chunks
         single_chunk = chunk_count == 1
         payload_type = "file_done" if single_chunk else "file_response"
-        response_payload = {"type": payload_type, "hash": hash, "data": str(chunk_data), "nonce": nonce, "filename": filepath, "is_last"=single_chunk}
+        response_payload = {"type": payload_type, "hash": hash, "data": chunk_data.hex(), "nonce": nonce, "filename": filepath, "is_last":single_chunk, "seq": 0}
         self.sock.sendto(json.dumps(response_payload).encode(), peer)
         return
 
@@ -182,7 +182,7 @@ class UDPClient:
         is_last = (seq+2 >= total_chunks)
         #index of last chunk == length of chunks list
         payload_type = "file_done" if is_last else "file_chunk"
-        transfer_payload = {"type": payload_type, "seq": seq+1, "nonce": nonce, "data": str(data), "is_last": is_last, "hash": hash, "filename": filename}
+        transfer_payload = {"type": payload_type, "seq": seq+1, "nonce": nonce, "data": data.hex(), "is_last": is_last, "hash": hash, "filename": filename}
         self.sock.sendto(json.dumps(payload).encode(), peer)
         return
 
@@ -209,18 +209,19 @@ class UDPClient:
             # file was single-chunk file
             # create tracker
             transfer = create_inbound(nonce=nonce, hash=hash, filename=filename)
-        bytes = b""
+        outputBytes = b""
         with transfer.lock:
             filepath = transfer.filename
             transfer.add_chunk(seq=seq, data=data, is_last=is_last)
-            bytes = transfer.assemble()
 
             if not transfer.has_all_chunks():
                 print("[!] DOES NOT HAVE ALL CHUNKS")
                 # re-request missing chunks
                 return
+            transfer.state = "done"
 
-            if not transfer.validate_hash(bytes):
+            outputBytes = transfer.assemble()
+            if not transfer.validate_hash(outputBytes):
                 print("[!] ERROR WITH FILE INTEGRITY")
                 # re-attempt file transfer
                 return
@@ -228,8 +229,10 @@ class UDPClient:
         self.sock.sendto(json.dumps(payload).encode(), peer)
         #write bytes buffer to file
         targetFilepath = os.path.join(MEDIA_DOWNLOAD_DIR, filepath)
+        print(f"writing {targetFilepath}!")
+        os.makedirs(os.path.dirname(targetFilepath), exist_ok=True)
         with open(targetFilepath, "wb") as target:
-            target.write(bytes)
+            target.write(outputBytes)
         # remove transfer tracker object
         remove_inbound(nonce=nonce)
         return

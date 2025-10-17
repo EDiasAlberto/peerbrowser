@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from typing import Dict, Set, Optional
 import os
 
-from utils import MEDIA_DOWNLOAD_DIR
+from utils import generate_hash, MEDIA_DOWNLOAD_DIR, TEMPFILE_LOC
 
 # Global dictionaries (thread-safe via locks)
 inbound_transfers: Dict[str, "InboundTransfer"] = {}
@@ -34,6 +34,10 @@ class InboundTransfer:
     filename: Optional[str] = None
     state: str = "receiving"  # "receiving", "done", "cancelled", "error"
     lock: threading.RLock = field(default_factory=threading.RLock) # used to add to dict of transfers
+
+    def is_complete(self):
+        with self.lock:
+            return self.state == "done"
 
     def touch(self):
         with self.lock:
@@ -67,11 +71,13 @@ class InboundTransfer:
                 raise RuntimeError("Transfer not complete")
             parts = []
             for i in range(self.expected_chunks):
-                parts.append(self.chunks[i])
+                parts.append(bytes.fromhex(self.chunks[i]))
             return b"".join(parts)
 
-    def validate_hash(self, hash: str) -> bool:
-        new_hash = generate_hash(hash)
+    def validate_hash(self, data: bytes) -> bool:
+        with open(TEMPFILE_LOC, "wb") as bFile:
+            bFile.write(data)
+        new_hash = generate_hash(TEMPFILE_LOC)
         with self.lock:
             return new_hash != self.hash
 
@@ -106,6 +112,7 @@ class OutboundTransfer:
                 self.chunks[seq] = chunk
                 seq += 1
         self.total_chunks = seq 
+        self.chunks[seq-1] = self.chunks[seq-1].strip()
 
     def touch(self):
         with self.lock:
