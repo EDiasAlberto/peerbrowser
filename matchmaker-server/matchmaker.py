@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """
 UDP rendezvous server for NAT hole punching.
-No client IDs, only IPs and ports are used.
 
-Protocol:
+Protocol (JSON over UDP):
+
 Client -> Server:
     {"type": "register"}
-    {"type": "connect", "target": ["ip", port]}
+    {"type": "connect", "target_ip": "x.x.x.x"}   # no port supplied by requester
 
 Server -> Client:
     {"type": "your_addr", "addr": ["ip", port]}
-    {"type": "peer", "peer": ["ip", port]}
+    {"type": "peer", "peer": ["peer_ip", peer_port]}
     {"type": "error", "msg": "description"}
 """
 
@@ -19,96 +19,177 @@ import json
 import socket
 import threading
 import time
+import queue
+from typing import Tuple, Dict
 
-clients = {}  # (ip, port) -> last_seen_time
-lock = threading.Lock()
+# Shared state
+# map: ip_str -> ( (ip, port), last_seen_timestamp )
+clients: Dict[str, Tuple[Tuple[str, int], float]] = {}
+clients_lock = threading.Lock()
 
+packet_queue = queue.Queue()
 
-def handle_packet(data, addr, sock):
+# Tunables
+CLEANUP_INTERVAL = 30          # seconds between cleanup passes
+CLIENT_TIMEOUT = 120           # consider client dead after 120s without re-register
+RECV_BUFFER_SIZE = 1024 * 1024 # 1 MiB socket receive buffer
+MAX_PACKET_SIZE = 4096         # recvfrom buffer
+
+def _now():
+    return time.time()
+
+def handle_packet(data: bytes, addr: Tuple[str, int], sock: socket.socket):
+    """
+    Process one incoming packet (JSON).
+    addr is the observed (ip, port) for the sender.
+    """
     try:
-        msg = json.loads(data.decode())
-    except Exception:
+        msg = json.loads(data.decode("utf-8"))
+    except Exception as e:
+        print(f"[decode] dropping non-JSON from {addr}: {e}")
         return
 
-    now = time.time()
-    msg_type = msg.get("type")
-
-    if msg_type == "register":
-        with lock:
-            clients[addr] = now
+    mtype = msg.get("type")
+    if mtype == "register":
+        # record the observed address for this client IP
+        ip = addr[0]
+        now = _now()
+        with clients_lock:
+            clients[ip] = (addr, now)
         reply = {"type": "your_addr", "addr": [addr[0], addr[1]]}
-        sock.sendto(json.dumps(reply).encode(), addr)
+        try:
+            sock.sendto(json.dumps(reply).encode("utf-8"), addr)
+        except Exception as e:
+            print(f"[send] failed your_addr -> {addr}: {e}")
+        # debug log
+        print(f"[register] {addr} (stored as {ip})")
 
-    elif msg_type == "connect":
-        target = msg.get("target")
-        if not target or len(target) != 2:
-            err = {"type": "error", "msg": "invalid target"}
-            sock.sendto(json.dumps(err).encode(), addr)
+    elif mtype == "connect":
+        target_ip = msg.get("target_ip")
+        if not target_ip:
+            err = {"type": "error", "msg": "missing target_ip"}
+            try: sock.sendto(json.dumps(err).encode("utf-8"), addr)
+            except Exception: pass
             return
 
-        target_ip, target_port = target
-        target_addr = (target_ip, int(target_port))
+        # look up the most recent registration for that IP
+        with clients_lock:
+            entry = clients.get(target_ip)
 
-        with lock:
-            active_clients = list(clients.keys())
-
-        if target_addr not in active_clients:
-            err = {"type": "error", "msg": "target not found or inactive"}
-            sock.sendto(json.dumps(err).encode(), addr)
+        if not entry:
+            err = {"type": "error", "msg": f"target {target_ip} not found or offline"}
+            try:
+                sock.sendto(json.dumps(err).encode("utf-8"), addr)
+            except Exception:
+                pass
+            print(f"[connect] {addr} -> {target_ip} (not found)")
             return
 
-        msg_to_src = {"type": "peer", "peer": [target_ip, int(target_port)]}
-        msg_to_dst = {"type": "peer", "peer": [addr[0], addr[1]]}
+        target_addr, _last_seen = entry
+        # Send peer info to both sides:
+        # - Tell requester where target is (ip, port)
+        # - Tell target where requester is (ip, port)
+        msg_to_requester = {"type": "peer", "peer": [target_addr[0], target_addr[1]]}
+        msg_to_target    = {"type": "peer", "peer": [addr[0], addr[1]]}
 
-        sock.sendto(json.dumps(msg_to_src).encode(), addr)
-        sock.sendto(json.dumps(msg_to_dst).encode(), target_addr)
+        try:
+            sock.sendto(json.dumps(msg_to_requester).encode("utf-8"), addr)
+        except Exception as e:
+            print(f"[send] failed peer->requester {addr}: {e}")
 
-        print(f"Linked {addr} <--> {target_addr}")
+        try:
+            sock.sendto(json.dumps(msg_to_target).encode("utf-8"), target_addr)
+        except Exception as e:
+            print(f"[send] failed peer->target {target_addr}: {e}")
+
+        print(f"[connect] linked requester {addr} <--> target {target_addr} (target_ip={target_ip})")
 
     else:
+        # unknown message type -> respond with an error
         err = {"type": "error", "msg": "unknown message type"}
-        sock.sendto(json.dumps(err).encode(), addr)
+        try:
+            sock.sendto(json.dumps(err).encode("utf-8"), addr)
+        except Exception:
+            pass
+        print(f"[unknown] from {addr}: {mtype}")
+
+
+def worker(sock: socket.socket):
+    """Background worker that processes queued packets."""
+    while True:
+        item = packet_queue.get()
+        if item is None:
+            break  # shutdown signal
+        data, addr = item
+        try:
+            handle_packet(data, addr, sock)
+        except Exception as e:
+            print(f"[worker] unhandled error processing packet from {addr}: {e}")
 
 
 def cleanup_loop():
+    """Periodically remove stale client registrations."""
     while True:
-        time.sleep(30)
-        cutoff = time.time() - 120
-        with lock:
-            inactive = [a for a, t in clients.items() if t < cutoff]
-            for a in inactive:
-                del clients[a]
-        if inactive:
-            print(f"Cleaned {len(inactive)} stale clients")
+        time.sleep(CLEANUP_INTERVAL)
+        cutoff = _now() - CLIENT_TIMEOUT
+        removed = []
+        with clients_lock:
+            for ip, (addr, last_seen) in list(clients.items()):
+                if last_seen < cutoff:
+                    removed.append(ip)
+                    del clients[ip]
+        if removed:
+            print(f"[cleanup] removed stale clients: {removed}")
 
 
-def run_server(host, port):
+def run_server(host: str, port: int):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
+    # reliability options
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     try:
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+        # optional: SO_REUSEPORT can cause distribution to multiple sockets; avoid unless intended
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, RECV_BUFFER_SIZE)
     except Exception:
         pass
 
     sock.bind((host, port))
-    print(f"Server listening on {host}:{port}")
+    print(f"[server] listening on {host}:{port}")
 
+    # start worker & cleanup threads
+    threading.Thread(target=worker, args=(sock,), daemon=True).start()
     threading.Thread(target=cleanup_loop, daemon=True).start()
 
     try:
         while True:
-            data, addr = sock.recvfrom(4096)
-            threading.Thread(target=handle_packet, args=(data, addr, sock), daemon=True).start()
+            try:
+                data, addr = sock.recvfrom(MAX_PACKET_SIZE)
+            except InterruptedError:
+                continue
+            except Exception as e:
+                print(f"[recv] socket error: {e}")
+                break
+
+            # quick sanity: update last_seen if this address was already registered
+            with clients_lock:
+                if addr[0] in clients:
+                    # replace last_seen and port in case NAT changed mapping
+                    clients[addr[0]] = (addr, _now())
+
+            # queue packet for worker
+            packet_queue.put((data, addr))
+
     except KeyboardInterrupt:
-        print("Shutting down.")
+        print("[server] shutting down")
     finally:
+        # signal worker to exit and close socket
+        packet_queue.put(None)
         sock.close()
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--host", default="0.0.0.0")
-    parser.add_argument("--port", type=int, default=3478)
+    parser.add_argument("--host", default="0.0.0.0", help="bind host")
+    parser.add_argument("--port", type=int, default=3478, help="bind UDP port")
     args = parser.parse_args()
     run_server(args.host, args.port)

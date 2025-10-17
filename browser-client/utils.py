@@ -1,3 +1,5 @@
+import hashlib
+
 TRACKER_SERVER_URL = "http://trackers.ediasalberto.com"
 MEDIA_DOWNLOAD_DIR = "./media/"
 
