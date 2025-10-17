@@ -216,9 +216,22 @@ class UDPClient:
         targetFilepath = os.path.join(MEDIA_DOWNLOAD_DIR, filepath)
         with open(targetFilepath, "wb") as target:
             target.write(bytes)
+        # remove transfer tracker object
+        remove_inbound(nonce=nonce)
         return
-            
-        
+    
+    def _handle_file_complete(self, request):
+        with self.peer_lock:
+            peer = self.peer_addr
+        if not peer:
+            print("[!] Error, peer not known")
+            return
+        # reomve transfer from list
+        # close udp connection with peer
+        nonce = request.get("nonce")
+        remove_outbound(nonce=nonce)
+        self.disconnect_peer()
+
 
     def _listen_loop(self):
         while self.alive.is_set():
@@ -274,7 +287,7 @@ class UDPClient:
                 elif t== "file_done":
                     self._handle_file_done(parsed)
                 elif t=="file_complete":
-                    print("PEER VALIDATED FILE, CLOSE CONNECTION")
+                    self._handle_file_complete(parsed)
                 else:
                     print(f"[<-] {parsed}")
             else:
