@@ -189,6 +189,7 @@ class UDPClient:
         # needs to assemble file
         # needs to validate file hash
         # needs to re-request corrupted/missing chunks
+        # if valid, send "file_complete" to peer, and save file
         seq = request.get(seq)
         nonce = request.get(nonce)
         data = request.get(data)
@@ -196,19 +197,17 @@ class UDPClient:
         transfer = get_inbound(nonce=nonce)
         with transfer.lock:
             transfer.add_chunk(seq=seq, data=data, is_last=is_last)
-
             bytes = transfer.assemble()
+
             if !transfer.has_all_chunks():
                 print("[!] DOES NOT HAVE ALL CHUNKS")
+                # re-request missing chunks
+                return
 
             if !transfer.validate_hash(bytes):
                 print("[!] ERROR WITH FILE INTEGRITY")
-
-
-
-
-
-
+                # re-attempt file transfer
+                return
 
     def _listen_loop(self):
         while self.alive.is_set():
