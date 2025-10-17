@@ -23,6 +23,7 @@ class InboundTransfer:
     Access to members must be protected by self.lock.
     """
     nonce: str
+    hash: str
     expected_chunks: Optional[int] = None   # None until last chunk informs
     chunks: Dict[int, bytes] = field(default_factory=dict) # maps seq to data
     received: Set[int] = field(default_factory=set)
@@ -74,6 +75,7 @@ class OutboundTransfer:
     """
     nonce: str
     filepath: str
+    hash: str 
     chunk_size: int
     chunks: Dict[int, bytes] = field(default_factory=dict)   # seq -> bytes
     total_chunks: int = 0
@@ -124,9 +126,9 @@ class OutboundTransfer:
 
         
 
-def create_inbound(nonce: str, filename: Optional[str] = None) -> InboundTransfer:
+def create_inbound(nonce: str, hash: str, filename: Optional[str] = None) -> InboundTransfer:
     # create transfer obj and add to dict
-    t = InboundTransfer(nonce=nonce, filename=filename)
+    t = InboundTransfer(nonce=nonce, hash=hash, filename=filename)
     with inbound_lock:
         inbound_transfers[nonce] = t
     return t
@@ -141,8 +143,8 @@ def remove_inbound(nonce: str):
     with inbound_lock:
         inbound_transfers.pop(nonce, None)
 
-def create_outbound(nonce: str, filepath: str, chunk_size: int = 1200) -> OutboundTransfer:
-    t = OutboundTransfer(nonce=nonce, filepath=filepath, chunk_size=chunk_size)
+def create_outbound(nonce: str, filepath: str, hash: str, chunk_size: int = 1200) -> OutboundTransfer:
+    t = OutboundTransfer(nonce=nonce, filepath=filepath, hash=hash, chunk_size=chunk_size)
     with outbound_lock:
         outbound_transfers[nonce] = t
     return t

@@ -113,8 +113,8 @@ class UDPClient:
         # 4) send "file_done" with final chunk and seq number
         # 5) wait for "file_accepted"
         # 6) close connection
-        filehash = generate_hash(filepath)
-        transfer = create_outbound(nonce=nonce, filepath=filepath)
+        hash = generate_hash(filepath)
+        transfer = create_outbound(nonce=nonce, filepath=filepath, hash=hash)
         with transfer.lock:
             chunk_data = transfer.chunks[0]
         response_payload = {"type": "file_response", "hash": filehash, "chunk": chunk_data, "nonce": nonce, "filename": filepath, "single_chunk": False}
@@ -133,7 +133,7 @@ class UDPClient:
         nonce = request.get("nonce")
         filename = request.get("filename")
         is_last = request.get("single_chunk")
-        transfer = create_inbound(nonce=nonce, filename=filename)
+        transfer = create_inbound(nonce=nonce, filename=filename, hash=hash)
         with transfer.lock:
             transfer.add_chunk(seq=0, data=initial_chunk, is_last=is_last)
         response_payload = {"type": "file_ack", "seq": 0, "nonce": nonce }
@@ -149,15 +149,11 @@ class UDPClient:
         seq = request.get(seq)
         nonce = request.get(nonce)
         data = request.get(data)
-        is_last = request.get(is_last)
         transfer = get_inbound(nonce=nonce)
 
         with transfer.lock:
-            transfer.add_chunk(seq=seq, data=data, is_last=is_last)
-        if is_last:
-            response_payload = {"type": "file_done", "seq": seq, "nonce": nonce}
-        else:
-            response_payload = {"type": "file_ack", "seq": seq, "nonce": nonce} 
+            transfer.add_chunk(seq=seq, data=data, is_last=False)
+        response_payload = {"type": "file_ack", "seq": seq, "nonce": nonce} 
         self.sock.sendto(json.dumps(response_payload).encode(), peer)
         return
         
@@ -175,11 +171,37 @@ class UDPClient:
         with transfer.lock:
             data = transfer.chunks[seq+1]
             total_chunks = transfer.total_chunks
-        is_last = (seq+1 == total_chunks)
+        is_last = (seq+2 == total_chunks)
         #index of last chunk == length of chunks list
-        transfer_payload = {"type": "file_chunk", "seq": seq+1, "nonce": nonce, "data": data, "is_last": is_last}
+        payload_type = "file_done" if is_last else "file_chunk"
+        transfer_payload = {"type": payload_type, "seq": seq+1, "nonce": nonce, "data": data, "is_last": is_last}
         self.sock.sendto(json.dumps(payload).encode(), peer)
         return
+
+    def _handle_file_done(self, request):
+        with self.peer_lock:
+            peer = self.peer_addr
+        if not peer:
+            print("[!] Error, peer not known")
+            return
+    
+        # needs to append latest chunk
+        # needs to assemble file
+        # needs to validate file hash
+        # needs to re-request corrupted/missing chunks
+        seq = request.get(seq)
+        nonce = request.get(nonce)
+        data = request.get(data)
+        is_last = request.get(is_last)
+        transfer = get_inbound(nonce=nonce)
+        with transfer.lock:
+            transfer.add_chunk(seq=seq, data=data, is_last=is_last)
+
+        transfer.assemble_file()
+        transfer.validate_hash()
+
+
+
 
 
 
@@ -236,7 +258,7 @@ class UDPClient:
                 elif t == "file_ack":
                     self._handle_file_ack(parsed)
                 elif t== "file_done":
-                    print("PEER COMPLETED TRANSFER, CHECK HASH")
+                    self._handle_file_done(parsed)
                 elif t=="file_accepted":
                     print("PEER VALIDATED FILE, CLOSE CONNECTION")
                 else:
