@@ -2,6 +2,9 @@
 
 A decentralized web browser implementation that allows users to publish and access websites through peer-to-peer connections, eliminating the need for traditional centralized web hosting.
 
+> NEED TO IMPLEMENT DEPENDENCY FETCHING AND SITE RENDERING
+> ALSO NEED TO IMPLEMENT UPDATING THE TRACKER SERVER
+
 ## 🌐 Overview
 
 PeerBrowser (also known as "Peernet") is a proof-of-concept decentralized web platform where:
@@ -322,21 +325,3 @@ Contributions are welcome! Areas for improvement:
 ## 📄 License
 
 This project is provided as-is for educational and research purposes.
-
-## 🔗 Related Technologies
-
-- **IPFS**: InterPlanetary File System
-- **BitTorrent**: Peer-to-peer file sharing protocol
-- **WebRTC**: Real-time P2P communication (alternative approach)
-- **Freenet**: Anonymous P2P network
-
-## 📞 Support
-
-For issues and questions:
-- Check the server logs: `docker-compose logs -f` 
-- Review the `tracker-server/README.md` for server-specific documentation
-- Ensure proper network configuration and port forwarding
-
----
-
-**Built with ❤️ for a decentralized web**
