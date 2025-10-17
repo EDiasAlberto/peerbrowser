@@ -1,6 +1,10 @@
 import hashlib
+import os
+from dotenv import load_dotenv
 
-TRACKER_SERVER_URL = "http://trackers.ediasalberto.com"
+load_dotenv()
+
+TRACKER_SERVER_URL = os.getenv("TRACKER_SERVER_URL", "http://localhost:8000")
 MEDIA_DOWNLOAD_DIR = "./media/"
 TEMPFILE_LOC = "./tempfile"
 
