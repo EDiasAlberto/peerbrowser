@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 import requests
 import os
 import hashlib
+import time #temporary solutoin
 
 from holepunch_server import UDPClient
 
@@ -87,12 +88,14 @@ def download_page(domain: str, page: str):
     # peer ends connection once file transfer complete
     # scan file for imported css or js
     # request and download similarly
-    filepath = os.path.join(site_title, page_dir) 
+    filepath = os.path.join(domain, page) 
     res = requests.get(TRACKER_SERVER_URL + f"/peers?filename={filepath}")
     if res:
-        peers = res["peers"]
+        peers = res.json()["peers"]
         for peer in peers:
             udpClient.request_connect(peer)
+            time.sleep(2) # temporary solution to wait until receive peer
+            print("requesting file")
             udpClient.send_file_request(filepath)
     else:
         print("ERROR: no peers for file")
@@ -207,6 +210,11 @@ def publish():
         if len(existing_pages) > 0:
             outputText += f"<p>WARN: These sites already existed (and so skipped upload): {existing_pages}</p>"
         return outputText
+
+@app.get("/test-download")
+def test_download():
+    download_page("epic-site", "index.html")
+    return {"status": "triggered"}
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000, host="0.0.0.0")

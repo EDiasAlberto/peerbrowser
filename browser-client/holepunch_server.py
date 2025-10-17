@@ -4,6 +4,7 @@ import json
 import socket
 import threading
 import time
+import random
 import sys
 
 KEEPALIVE_INTERVAL = 10.0
@@ -49,7 +50,7 @@ class UDPClient:
         self.sock.sendto(json.dumps(msg).encode(), self.server_addr)
         print(f"[i] Sent connect request for {target_ip} to server")
 
-    def _generate_nonce(length=8):
+    def _generate_nonce(self, length=8):
         return ''.join([str(random.randint(0, 9)) for i in range(length)])
 
     def send_file_request(self, filepath: str):
@@ -60,8 +61,8 @@ class UDPClient:
             return
         nonce = self._generate_nonce()
         payload = {"type": "file_request", "filepath": filepath, "nonce": nonce}
-        self.sock.sendto(json.dumps(payload).encode(), peer)
-        print(f"[->] Requested {file} from {peer}")
+        self.sock.sendto(json.dumps(payload).encode("utf-8"), peer)
+        print(f"[->] Requested {filepath} from {peer}")
 
     def send_text_to_peer(self, text: str):
         with self.peer_lock:
