@@ -47,7 +47,8 @@ def fetch_page():
     site_title = request.args.get("site_title")
     page_dir = request.args.get("page_dir", "index.html")
 
-    # TODO: your logic to query tracker + fetch file
+    if os.path.isfile(os.path.join(MEDIA_DOWNLOAD_DIR, site_title, page_dir)):
+        return f"<h4>Skipped file {page_dir} of site {site_title} as it already exists locally"
     download_page(site_title, page_dir)
     filepath = site_title + "/" + page_dir
     response = requests.get(TRACKER_SERVER_URL + f"/peers?filename={filepath}")
