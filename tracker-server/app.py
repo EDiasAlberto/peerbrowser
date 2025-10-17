@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Header
 import redis
 from datetime import datetime
 
@@ -25,9 +25,18 @@ def get_peers(filename: str):
     peers = r.smembers(f"file:{filename}")
     return {"filename": filename, "peers": list(peers)}
 
+def get_real_ip(request: Request) -> str:
+    ip = request.headers.get("cf-connecting-ip")
+    if ip:
+        return ip
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.client.host
+
 @app.post("/add")
 def add_mapping(request: Request, filename: str, hash:str):
-    ip = request.client.host
+    ip = get_real_ip(request) 
     r.sadd(f"file:{filename}", ip)
     r.sadd(f"ip:{ip}", filename)
     r.set(f"filehash:{filename}", hash)

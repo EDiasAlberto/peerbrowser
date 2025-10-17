@@ -93,7 +93,7 @@ def download_page(domain: str, page: str):
         peers = res["peers"]
         for peer in peers:
             udpClient.request_connect(peer)
-            udpClient.request_file(filepath)
+            udpClient.send_file_request(filepath)
     else:
         print("ERROR: no peers for file")
 
@@ -121,7 +121,6 @@ def post_site_pages(project_name: str):
         for name in files:
             filepath = os.path.join(path, name)
             hash = hashlib.md5(open(filepath, "rb").read()).hexdigest()
-            print(hash)
             filepath = filepath.replace(MEDIA_DOWNLOAD_DIR, "")
             if is_malicious_filepath(filepath):
                 existing_or_malicious_pages.append(filepath)
@@ -130,7 +129,7 @@ def post_site_pages(project_name: str):
             if len(response.json()["peers"]) > 0:
                 existing_or_malicious_pages.append(filepath)
                 continue
-            response = requests.post(TRACKER_SERVER_URL + f"/add?filename={filepath}")
+            response = requests.post(TRACKER_SERVER_URL + f"/add?filename={filepath}&hash={hash}")
 
     return existing_or_malicious_pages 
 
