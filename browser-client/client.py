@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 import requests
 import os
 import hashlib
-import time #temporary solutoin
+import time  # temporary solution
 
 from utils import generate_hash, TRACKER_SERVER_URL, MEDIA_DOWNLOAD_DIR
 from holepunch_server import UDPClient
@@ -14,70 +14,13 @@ udpClient = UDPClient(server_host=os.getenv("MATCHMAKER_HOST"), server_port=os.g
 udpClient.start()
 app = Flask(__name__)
 
-@app.route("/", methods=["GET"])
-def network_load():
-    # Simple HTML form for user input
-    html_form = """
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8" />
-        <title>Peernet Browser</title>
-        <style>
-            body {
-                font-family: sans-serif;
-                background: #111;
-                color: #eee;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: center;
-                height: 100vh;
-                margin: 0;
-            }
-            form {
-                background: #222;
-                padding: 2em;
-                border-radius: 10px;
-                box-shadow: 0 0 20px rgba(255, 255, 255, 0.1);
-                width: 350px;
-            }
-            input[type=text] {
-                width: 100%;
-                padding: 0.6em;
-                margin: 0.5em 0 1em;
-                border-radius: 5px;
-                border: none;
-                outline: none;
-            }
-            input[type=submit] {
-                background: #08f;
-                color: white;
-                border: none;
-                border-radius: 5px;
-                padding: 0.6em 1em;
-                cursor: pointer;
-            }
-            input[type=submit]:hover {
-                background: #06c;
-            }
-        </style>
-    </head>
-    <body>
-        <h2>Access Peernet Site</h2>
-        <form action="{{ url_for('fetch_page') }}" method="get">
-            <label for="site_title">Domain / Site Title:</label><br>
-            <input type="text" id="site_title" name="site_title" placeholder="example.peernet" required><br>
-
-            <label for="page_dir">Page Path (optional):</label><br>
-            <input type="text" id="page_dir" name="page_dir" value="index.html"><br>
-
-            <input type="submit" value="Fetch Page">
-        </form>
-    </body>
-    </html>
-    """
-    return render_template_string(html_form)
+# --- Shared nav HTML for both pages ---
+NAV_HTML = """
+<nav>
+    <a href="{{ url_for('network_load') }}" class="nav-link">🏠 Home</a>
+    <a href="{{ url_for('publish') }}" class="nav-link">📤 Publish</a>
+</nav>
+"""
 
 def download_page(domain: str, page: str):
     # get peers for a given {domain}/{page}
@@ -135,36 +78,151 @@ def post_site_pages(project_name: str):
 
     return existing_or_malicious_pages 
 
+@app.route("/", methods=["GET"])
+def network_load():
+    html_form = f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <title>Peernet Browser</title>
+        <style>
+            body {{
+                font-family: sans-serif;
+                background: #111;
+                color: #eee;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: flex-start;
+                height: 100vh;
+                margin: 0;
+                padding-top: 60px;
+            }}
+            nav {{
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                background: #222;
+                display: flex;
+                justify-content: center;
+                gap: 1em;
+                padding: 0.8em 0;
+                box-shadow: 0 2px 5px rgba(0,0,0,0.4);
+                z-index: 10;
+            }}
+            .nav-link {{
+                color: #eee;
+                text-decoration: none;
+                background: #333;
+                padding: 0.4em 0.8em;
+                border-radius: 6px;
+                transition: background 0.2s;
+            }}
+            .nav-link:hover {{
+                background: #08f;
+            }}
+            form {{
+                background: #222;
+                padding: 2em;
+                border-radius: 10px;
+                box-shadow: 0 0 20px rgba(255, 255, 255, 0.1);
+                width: 350px;
+            }}
+            input[type=text] {{
+                width: 100%;
+                padding: 0.6em;
+                margin: 0.5em 0 1em;
+                border-radius: 5px;
+                border: none;
+                outline: none;
+            }}
+            input[type=submit] {{
+                background: #08f;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                padding: 0.6em 1em;
+                cursor: pointer;
+            }}
+            input[type=submit]:hover {{
+                background: #06c;
+            }}
+        </style>
+    </head>
+    <body>
+        {NAV_HTML}
+        <h2>Access Peernet Site</h2>
+        <form action="{{{{ url_for('fetch_page') }}}}" method="get">
+            <label for="site_title">Domain / Site Title:</label><br>
+            <input type="text" id="site_title" name="site_title" placeholder="example.peernet" required><br>
+
+            <label for="page_dir">Page Path (optional):</label><br>
+            <input type="text" id="page_dir" name="page_dir" value="index.html"><br>
+
+            <input type="submit" value="Fetch Page">
+        </form>
+    </body>
+    </html>
+    """
+    return render_template_string(html_form)
+
 @app.route("/publish", methods=["GET", "POST"])
 def publish():
     if request.method == "GET":
-        return """
+        html_page = f"""
         <!DOCTYPE html>
         <html lang="en">
         <head>
             <meta charset="UTF-8">
             <title>Publish to Peernet</title>
             <style>
-                body {
+                body {{
                     font-family: Arial, sans-serif;
                     max-width: 600px;
-                    margin: 60px auto;
+                    margin: 80px auto;
                     padding: 20px;
                     background: #fafafa;
                     border-radius: 10px;
                     box-shadow: 0 0 10px rgba(0,0,0,0.1);
-                }
-                h1 { text-align: center; }
-                h3 { color: #555; font-weight: normal; }
-                label { display: block; margin-top: 15px; font-weight: bold; }
-                input[type=text] {
+                    color: #222;
+                }}
+                nav {{
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    background: #333;
+                    display: flex;
+                    justify-content: center;
+                    gap: 1em;
+                    padding: 0.8em 0;
+                    box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+                    z-index: 10;
+                }}
+                .nav-link {{
+                    color: #eee;
+                    text-decoration: none;
+                    background: #444;
+                    padding: 0.4em 0.8em;
+                    border-radius: 6px;
+                    transition: background 0.2s;
+                }}
+                .nav-link:hover {{
+                    background: #06c;
+                }}
+                h1 {{ text-align: center; }}
+                h3 {{ color: #555; font-weight: normal; }}
+                label {{ display: block; margin-top: 15px; font-weight: bold; }}
+                input[type=text] {{
                     width: 100%;
                     padding: 10px;
                     margin-top: 5px;
                     border: 1px solid #ccc;
                     border-radius: 5px;
-                }
-                input[type=submit] {
+                }}
+                input[type=submit] {{
                     margin-top: 20px;
                     background-color: #0066cc;
                     color: white;
@@ -172,15 +230,16 @@ def publish():
                     border: none;
                     border-radius: 5px;
                     cursor: pointer;
-                }
-                input[type=submit]:hover {
+                }}
+                input[type=submit]:hover {{
                     background-color: #004d99;
-                }
+                }}
             </style>
         </head>
         <body>
+            {NAV_HTML}
             <h1>Publish a Website to Peernet</h1>
-            <h3>Your local files will be fetched from <code>./media/{websiteName}/</code> (HTML, CSS, JS)</h3>
+            <h3>Your local files will be fetched from <code>./media/{{{{websiteName}}}}/</code> (HTML, CSS, JS)</h3>
             
             <form action="/publish" method="POST">
                 <label for="websiteName">Website Name:</label>
@@ -194,13 +253,11 @@ def publish():
         </body>
         </html>
         """
+        return render_template_string(html_page)
 
     elif request.method == "POST":
         website_name = request.form.get("websiteName")
         start_page = request.form.get("startPage", "index.html")
-        # TODO: Implement logic to register or publish the site to the peernet
-        # TODO: upload hashes
-        # TODO: Publish/update db with stored sites upon boot
 
         startpage_path = f"{website_name}/{start_page}"
         existing_pages = post_site_pages(website_name)
@@ -209,6 +266,8 @@ def publish():
         if len(existing_pages) > 0:
             outputText += f"<p>WARN: These sites already existed (and so skipped upload): {existing_pages}</p>"
         return outputText
+
+# --- rest of your app unchanged ---
 
 @app.get("/test-download")
 def test_download():
