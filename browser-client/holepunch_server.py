@@ -139,6 +139,27 @@ class UDPClient:
         response_payload = {"type": "file_ack", "seq": 0, "nonce": nonce }
         self.sock.sendto(json.dumps(payload).encode(), peer)
         return
+
+    def _handle_file_chunk(self, request):
+        with self.peer_lock:
+            peer = self.peer_addr
+        if not peer:
+            print("[!] Error, peer not known")
+            return
+        seq = request.get(seq)
+        nonce = request.get(nonce)
+        data = request.get(data)
+        is_last = request.get(is_last)
+        transfer = get_inbound(nonce=nonce)
+
+        with transfer.lock:
+            transfer.add_chunk(seq=seq, data=data, is_last=is_last)
+        if is_last:
+            response_payload = {"type": "file_done", "seq": seq, "nonce": nonce}
+        else:
+            response_payload = {"type": "file_ack", "seq": seq, "nonce": nonce} 
+        self.sock.sendto(json.dumps(response_payload).encode(), peer)
+        return
         
     def _handle_file_ack(self, request):
         with self.peer_lock:
@@ -153,7 +174,10 @@ class UDPClient:
         transfer.mark_acked(seq)
         with transfer.lock:
             data = transfer.chunks[seq+1]
-        transfer_payload = {"type": "file_chunk", "seq": seq+1, "nonce": nonce, "data": data}
+            total_chunks = transfer.total_chunks
+        is_last = seq+1 = total_chunks
+        #index of last chunk == length of chunks list
+        transfer_payload = {"type": "file_chunk", "seq": seq+1, "nonce": nonce, "data": data, "is_last": is_last}
         self.sock.sendto(json.dumps(payload).encode(), peer)
         return
 
@@ -208,7 +232,7 @@ class UDPClient:
                 elif t == "file_response":
                     self._handle_file_response(parsed)
                 elif t == "file_chunk":
-                    print("RECEIVED FILE CHUNK")
+                    self._handle_file_chunk(parsed)
                 elif t == "file_ack":
                     self._handle_file_ack(parsed)
                 elif t== "file_done":
