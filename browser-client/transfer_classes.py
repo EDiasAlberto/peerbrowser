@@ -67,6 +67,12 @@ class InboundTransfer:
                 parts.append(self.chunks[i])
             return b"".join(parts)
 
+    def validate_hash(self, hash: str) -> bool:
+        new_hash = generate_hash(hash)
+        with self.lock:
+            return new_hash != self.hash:
+
+
 @dataclass
 class OutboundTransfer:
     """

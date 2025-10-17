@@ -197,8 +197,12 @@ class UDPClient:
         with transfer.lock:
             transfer.add_chunk(seq=seq, data=data, is_last=is_last)
 
-        transfer.assemble_file()
-        transfer.validate_hash()
+            bytes = transfer.assemble()
+            if !transfer.has_all_chunks():
+                print("[!] DOES NOT HAVE ALL CHUNKS")
+
+            if !transfer.validate_hash(bytes):
+                print("[!] ERROR WITH FILE INTEGRITY")
 
 
 
