@@ -73,6 +73,8 @@ class OutboundTransfer:
     Access to members must be protected by self.lock.
     """
     nonce: str
+    filepath: str
+    chunk_size: int
     chunks: Dict[int, bytes] = field(default_factory=dict)   # seq -> bytes
     total_chunks: int = 0
     acks: Set[int] = field(default_factory=set)   # seqs acknowledged by peer
@@ -82,6 +84,17 @@ class OutboundTransfer:
     last_activity: float = field(default_factory=time.time)
     state: str = "sending"  # "sending", "finished", "cancelled", "error"
     lock: threading.RLock = field(default_factory=threading.RLock) # used to add to dict of transfers
+
+    def __post_init__(self):
+        self._generate_chunks()
+
+    def _generate_chunks(self):
+        seq = 0
+        with open(self.filepath, "rb") as file:
+            while (chunk := file.read(self.chunk_size)):
+                self.chunks[seq] = chunk
+                seq += 1
+        self.total_chunks = seq + 1
 
     def touch(self):
         with self.lock:
@@ -107,3 +120,37 @@ class OutboundTransfer:
                     return False  # signal too many retries
                 return True
             return False
+
+
+        
+
+def create_inbound(nonce: str, filename: Optional[str] = None) -> InboundTransfer:
+    # create transfer obj and add to dict
+    t = InboundTransfer(nonce=nonce, filename=filename)
+    with inbound_lock:
+        inbound_transfers[nonce] = t
+    return t
+
+def get_inbound(nonce: str) -> Optional[InboundTransfer]:
+    # return transfer data for given session
+    with inbound_lock:
+        return inbound_transfers.get(nonce)
+
+def remove_inbound(nonce: str):
+    # remove transfer tracker
+    with inbound_lock:
+        inbound_transfers.pop(nonce, None)
+
+def create_outbound(nonce: str, filepath: str, data_bytes: bytes, chunk_size: int = 1200) -> OutboundTransfer:
+    t = OutboundTransfer(nonce=nonce, filepath=filepath, chunk_size=chunk_size)
+    with outbound_lock:
+        outbound_transfers[nonce] = t
+    return t
+
+def get_outbound(nonce: str) -> Optional[OutboundTransfer]:
+    with outbound_lock:
+        return outbound_transfers.get(nonce)
+
+def remove_outbound(nonce: str):
+    with outbound_lock:
+        outbound_transfers.pop(nonce, None)
