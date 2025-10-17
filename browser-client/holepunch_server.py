@@ -6,6 +6,7 @@ import threading
 import time
 import random
 import sys
+import os
 
 from utils import generate_hash, MEDIA_DOWNLOAD_DIR
 from transfer_classes import create_inbound, create_outbound, get_inbound, get_outbound, remove_inbound, remove_outbound
@@ -120,8 +121,11 @@ class UDPClient:
         transfer = create_outbound(nonce=nonce, filepath=filepath, hash=hash)
         with transfer.lock:
             chunk_data = transfer.chunks[0]
-        response_payload = {"type": "file_response", "hash": filehash, "chunk": chunk_data, "nonce": nonce, "filename": filepath, "single_chunk": False}
-        self.sock.sendto(json.dumps(payload).encode(), peer)
+            chunk_count = transfer.total_chunks
+        single_chunk = chunk_count == 1
+        payload_type = "file_done" if single_chunk else "file_response"
+        response_payload = {"type": payload_type, "hash": hash, "data": str(chunk_data), "nonce": nonce, "filename": filepath, "is_last"=single_chunk}
+        self.sock.sendto(json.dumps(response_payload).encode(), peer)
         return
 
     def _handle_file_response(self, request):
@@ -132,15 +136,15 @@ class UDPClient:
             return  
 
         hash = request.get("filehash")
-        initial_chunk = request.get("chunk_data")
+        initial_chunk = request.get("data")
         nonce = request.get("nonce")
         filename = request.get("filename")
-        is_last = request.get("single_chunk")
+        is_last = request.get("is_last")
         transfer = create_inbound(nonce=nonce, filename=filename, hash=hash)
         with transfer.lock:
             transfer.add_chunk(seq=0, data=initial_chunk, is_last=is_last)
         response_payload = {"type": "file_ack", "seq": 0, "nonce": nonce }
-        self.sock.sendto(json.dumps(payload).encode(), peer)
+        self.sock.sendto(json.dumps(response_payload).encode(), peer)
         return
 
     def _handle_file_chunk(self, request):
@@ -149,9 +153,9 @@ class UDPClient:
         if not peer:
             print("[!] Error, peer not known")
             return
-        seq = request.get(seq)
-        nonce = request.get(nonce)
-        data = request.get(data)
+        seq = request.get("seq")
+        nonce = request.get("nonce")
+        data = request.get("data")
         transfer = get_inbound(nonce=nonce)
 
         with transfer.lock:
@@ -167,17 +171,18 @@ class UDPClient:
             print("[!] Error, peer not known")
             return
 
-        seq = request.get(seq)
-        nonce = request.get(nonce)
+        seq = request.get("seq")
+        nonce = request.get("nonce")
         transfer = get_outbound(nonce=nonce)
         transfer.mark_acked(seq)
         with transfer.lock:
             data = transfer.chunks[seq+1]
+            filename = transfer.filename
             total_chunks = transfer.total_chunks
-        is_last = (seq+2 == total_chunks)
+        is_last = (seq+2 >= total_chunks)
         #index of last chunk == length of chunks list
         payload_type = "file_done" if is_last else "file_chunk"
-        transfer_payload = {"type": payload_type, "seq": seq+1, "nonce": nonce, "data": data, "is_last": is_last}
+        transfer_payload = {"type": payload_type, "seq": seq+1, "nonce": nonce, "data": str(data), "is_last": is_last, "hash": hash, "filename": filename}
         self.sock.sendto(json.dumps(payload).encode(), peer)
         return
 
@@ -193,11 +198,17 @@ class UDPClient:
         # needs to validate file hash
         # needs to re-request corrupted/missing chunks
         # if valid, send "file_complete" to peer, and save file
-        seq = request.get(seq)
-        nonce = request.get(nonce)
-        data = request.get(data)
-        is_last = request.get(is_last)
+        seq = request.get("seq")
+        nonce = request.get("nonce")
+        data = request.get("data")
+        hash = request.get("hash")
+        filename = request.get("filename")
+        is_last = request.get("is_last")
         transfer = get_inbound(nonce=nonce)
+        if not transfer:
+            # file was single-chunk file
+            # create tracker
+            transfer = create_inbound(nonce=nonce, hash=hash, filename=filename)
         bytes = b""
         with transfer.lock:
             filepath = transfer.filename

@@ -3,6 +3,9 @@ import time
 import base64
 from dataclasses import dataclass, field
 from typing import Dict, Set, Optional
+import os
+
+from utils import MEDIA_DOWNLOAD_DIR
 
 # Global dictionaries (thread-safe via locks)
 inbound_transfers: Dict[str, "InboundTransfer"] = {}
@@ -98,11 +101,11 @@ class OutboundTransfer:
 
     def _generate_chunks(self):
         seq = 0
-        with open(self.filepath, "rb") as file:
+        with open(os.path.join(MEDIA_DOWNLOAD_DIR, self.filepath), "rb") as file:
             while (chunk := file.read(self.chunk_size)):
                 self.chunks[seq] = chunk
                 seq += 1
-        self.total_chunks = seq + 1
+        self.total_chunks = seq 
 
     def touch(self):
         with self.lock:
