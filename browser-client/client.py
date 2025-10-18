@@ -27,6 +27,7 @@ def download_page(domain: str, page: str):
     # TODO:
     # scan file for imported css or js
     # request and download similarly
+    filepath = os.path.join(domain, page)
     res = apiClient.get_peers(domain, page)
     if res:
         peers = res.json()["peers"]
@@ -35,6 +36,15 @@ def download_page(domain: str, page: str):
             time.sleep(2) # temporary solution to wait until receive peer
             print("requesting file")
             udpClient.send_file_request(filepath)
+            time.sleep(5)
+            if os.path.isfile(os.path.join(MEDIA_DOWNLOAD_DIR, filepath)):
+                hash = generate_hash(filepath)
+                apiClient.add_tracker(domain, page, hash)
+                break
+            else:
+                # peer does not work for file
+                apiClient.remove_tracker(peer, domain, page)
+
     else:
         print("ERROR: no peers for file")
 
