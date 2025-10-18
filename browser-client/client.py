@@ -7,9 +7,10 @@ import time  # temporary solution
 
 from utils import generate_hash, TRACKER_SERVER_URL, MEDIA_DOWNLOAD_DIR
 from holepunch_server import UDPClient
-
+from tracker_api import APIClient
 
 load_dotenv()
+apiClient = APIClient(base_url=TRACKER_SERVER_URL)
 udpClient = UDPClient(server_host=os.getenv("MATCHMAKER_HOST"), server_port=os.getenv("MATCHMAKER_PORT"))
 udpClient.start()
 app = Flask(__name__)
@@ -23,18 +24,14 @@ NAV_HTML = """
 """
 
 def download_page(domain: str, page: str):
-    # get peers for a given {domain}/{page}
-    # request UDP hole for first returned IP
-    # receive html file line-by-line, write output to file
-    # peer ends connection once file transfer complete
+    # TODO:
     # scan file for imported css or js
     # request and download similarly
-    filepath = os.path.join(domain, page) 
-    res = requests.get(TRACKER_SERVER_URL + f"/peers?filename={filepath}")
+    res = apiClient.get_peers(domain, page)
     if res:
         peers = res.json()["peers"]
         for peer in peers:
-            udpClient.request_connect(peer)
+            state = udpClient.request_connect(peer)
             time.sleep(2) # temporary solution to wait until receive peer
             print("requesting file")
             udpClient.send_file_request(filepath)
@@ -50,9 +47,7 @@ def fetch_page():
     if os.path.isfile(os.path.join(MEDIA_DOWNLOAD_DIR, site_title, page_dir)):
         return f"<h4>Skipped file {page_dir} of site {site_title} as it already exists locally"
     download_page(site_title, page_dir)
-    filepath = site_title + "/" + page_dir
-    response = requests.get(TRACKER_SERVER_URL + f"/peers?filename={filepath}")
-    print(response)
+    response = apiClient.get_peers(site_title, page_dir)
     return f"<h3>Fetching <code>{page_dir}</code> from <code>{site_title}</code>...</h3>"
 
 def is_malicious_filepath(filepath: str):
@@ -71,11 +66,11 @@ def post_site_pages(project_name: str):
             if is_malicious_filepath(filepath):
                 existing_or_malicious_pages.append(filepath)
                 continue
-            response = requests.get(TRACKER_SERVER_URL + f"/peers?filename={filepath}")
+            response = apiClient.get_peers(path, name)
             if len(response.json()["peers"]) > 0:
                 existing_or_malicious_pages.append(filepath)
                 continue
-            response = requests.post(TRACKER_SERVER_URL + f"/add?filename={filepath}&hash={hash}")
+            response = apiClient.add_tracker(path, name, hash)
 
     return existing_or_malicious_pages 
 
@@ -267,8 +262,6 @@ def publish():
         if len(existing_pages) > 0:
             outputText += f"<p>WARN: These sites already existed (and so skipped upload): {existing_pages}</p>"
         return outputText
-
-# --- rest of your app unchanged ---
 
 @app.get("/test-download")
 def test_download():
