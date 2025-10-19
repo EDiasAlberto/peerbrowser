@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template_string, redirect, url_for
+from flask import Flask, request, render_template, render_template_string, redirect, url_for
 from dotenv import load_dotenv
 import requests
 import os
@@ -10,9 +10,13 @@ from holepunch_server import UDPClient
 from tracker_api import APIClient
 
 load_dotenv()
-apiClient = APIClient(base_url=TRACKER_SERVER_URL)
-udpClient = UDPClient(server_host=os.getenv("MATCHMAKER_HOST"), server_port=os.getenv("MATCHMAKER_PORT"))
+
+def on_file_download(filepath: str):
+    return redirect(f"/load_peer_page/{filepath}")
+
+udpClient = UDPClient(server_host=os.getenv("MATCHMAKER_HOST"), server_port=os.getenv("MATCHMAKER_PORT"), completed_download_callback=on_file_download)
 udpClient.start()
+apiClient = APIClient(base_url=TRACKER_SERVER_URL)
 app = Flask(__name__)
 
 # --- Shared nav HTML for both pages ---
@@ -23,12 +27,22 @@ NAV_HTML = """
 </nav>
 """
 
-def download_page(domain: str, page: str):
+def is_malicious_filepath(filepath: str):
+    has_dir_traversal = (filepath.find("..")) != -1
+    attempted_root_access = (filepath.strip()[0] == "/")
+    return has_dir_traversal or attempted_root_access
+
+def remove_unresponsive_peer(peer: str):
+    print(f"{peer} IS NOT RESPONDING")
+
+def remove_peer_file_not_found(peer: str, file: str):
+    print(f"{peer} DOES NOT HAVE FILE {file}")
+
+def download_page(filepath: str):
     # TODO:
     # scan file for imported css or js
     # request and download similarly
-    filepath = os.path.join(domain, page)
-    res = apiClient.get_peers(domain, page)
+    res = apiClient.get_peers(filepath)
     if res:
         peers = res.json()["peers"]
         for peer in peers:
@@ -39,31 +53,33 @@ def download_page(domain: str, page: str):
             time.sleep(5) # temporary solution to delay until download complete/failed
             if os.path.isfile(os.path.join(MEDIA_DOWNLOAD_DIR, filepath)):
                 hash = generate_hash(filepath)
-                apiClient.add_tracker(domain, page, hash)
+                apiClient.add_tracker(filepath, hash)
                 break
             else:
                 # peer does not work for file
-                apiClient.remove_tracker(peer, domain, page)
+                apiClient.remove_tracker(peer, filepath)
 
+@app.route("/load_peer_page/<path:path>", methods=["GET"])
+def load_page(path: str):
+    if is_malicious_filepath(path):
+        print("BIG PROBLEM")
+        return
+    full_filepath = os.path.join(MEDIA_DOWNLOAD_DIR, path)
+    if os.path.isfile(full_filepath):
+        with open(full_filepath, "r") as html:
+            return html.read()
     else:
-        print("ERROR: no peers for file")
-
+        download_page(path)
+        return f"<h3> Fetching page {full_filepath} </h3>"
 
 @app.route("/get-page", methods=["GET"])
 def fetch_page():
     site_title = request.args.get("site_title")
     page_dir = request.args.get("page_dir", "index.html")
 
-    if os.path.isfile(os.path.join(MEDIA_DOWNLOAD_DIR, site_title, page_dir)):
-        return f"<h4>Skipped file {page_dir} of site {site_title} as it already exists locally"
-    download_page(site_title, page_dir)
-    response = apiClient.get_peers(site_title, page_dir)
-    return f"<h3>Fetching <code>{page_dir}</code> from <code>{site_title}</code>...</h3>"
+    filepath = os.path.join(site_title, page_dir)
+    return redirect(f"/load_peer_page/{filepath}")
 
-def is_malicious_filepath(filepath: str):
-    has_dir_traversal = (filepath.find("..")) != -1
-    attempted_root_access = (filepath.strip()[0] == "/")
-    return has_dir_traversal or attempted_root_access
 
 
 def post_site_pages(project_name: str):
@@ -76,11 +92,11 @@ def post_site_pages(project_name: str):
             if is_malicious_filepath(filepath):
                 existing_or_malicious_pages.append(filepath)
                 continue
-            response = apiClient.get_peers(path, name)
+            response = apiClient.get_peers(filepath)
             if len(response.json()["peers"]) > 0:
                 existing_or_malicious_pages.append(filepath)
                 continue
-            response = apiClient.add_tracker(path, name, hash)
+            response = apiClient.add_tracker(filepath, hash)
 
     return existing_or_malicious_pages 
 

@@ -7,6 +7,7 @@ import time
 import random
 import sys
 import os
+from typing import Callable
 
 from utils import generate_hash, MEDIA_DOWNLOAD_DIR
 from transfer_classes import create_inbound, create_outbound, get_inbound, get_outbound, remove_inbound, remove_outbound
@@ -15,8 +16,9 @@ KEEPALIVE_INTERVAL = 10.0
 RECV_BUFFER_SIZE = 1024 * 1024 
 
 class UDPClient:
-    def __init__(self, server_host: str, server_port: int):
+    def __init__(self, server_host: str, server_port: int, completed_download_callback: Callable):
         self.server_addr = (server_host, int(server_port))
+        self.completed_download_callback = completed_download_callback
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, RECV_BUFFER_SIZE)
@@ -233,6 +235,7 @@ class UDPClient:
         os.makedirs(os.path.dirname(targetFilepath), exist_ok=True)
         with open(targetFilepath, "wb") as target:
             target.write(outputBytes)
+        self.completed_download_callback(filepath)
         # remove transfer tracker object
         remove_inbound(nonce=nonce)
         return
