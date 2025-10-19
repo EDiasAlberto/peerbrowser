@@ -36,7 +36,7 @@ def download_page(domain: str, page: str):
             time.sleep(2) # temporary solution to wait until receive peer
             print("requesting file")
             udpClient.send_file_request(filepath)
-            time.sleep(5)
+            time.sleep(5) # temporary solution to delay until download complete/failed
             if os.path.isfile(os.path.join(MEDIA_DOWNLOAD_DIR, filepath)):
                 hash = generate_hash(filepath)
                 apiClient.add_tracker(domain, page, hash)
