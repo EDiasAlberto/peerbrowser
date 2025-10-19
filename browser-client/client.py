@@ -34,7 +34,7 @@ def download_page(filepath: str):
     if res:
         peers = res.json()["peers"]
         for peer in peers:
-            udpClient.request_connect(peer=peer)
+            udpClient.request_connect(peer)
             time.sleep(2) # temporary solution to wait until receive peer
             print("requesting file")
             udpClient.send_file_request(filepath)
@@ -117,8 +117,7 @@ def load_page(path: str):
             return html.read()
     else:
         download_page(path)
-        print("FILE DOES NOT EXIST")
-        return
+        return f"<h3> Fetching page {full_filepath} </h3>"
 
 @app.route("/get-page", methods=["GET"])
 def fetch_page():

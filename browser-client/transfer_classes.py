@@ -79,7 +79,7 @@ class InboundTransfer:
             bFile.write(data)
         new_hash = generate_hash(TEMPFILE_LOC)
         with self.lock:
-            return new_hash != self.hash
+            return new_hash == self.hash
 
 
 @dataclass
