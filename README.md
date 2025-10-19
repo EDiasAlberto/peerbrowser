@@ -2,8 +2,7 @@
 
 A decentralized web browser implementation that allows users to publish and access websites through peer-to-peer connections, eliminating the need for traditional centralized web hosting.
 
-> NEED TO IMPLEMENT DEPENDENCY FETCHING AND SITE RENDERING
-> ALSO NEED TO IMPLEMENT UPDATING THE TRACKER SERVER
+> NEED TO IMPLEMENT DEPENDENCY FETCHING
 
 ## 🌐 Overview
 
