@@ -70,10 +70,7 @@ def load_page(path: str):
     if os.path.isfile(full_filepath):
         parent_folder = os.path.dirname(full_filepath)
         deps = file_parser.get_all_dependencies(full_filepath, parent_folder)
-        if deps is None:
-            print(full_filepath)
         missing_deps = [x for x in deps if not os.path.isfile(x)]
-        print(missing_deps)
         if (len(missing_deps) == 0):
             with open(full_filepath, "r") as html:
                 return html.read()
