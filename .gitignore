@@ -48,4 +48,5 @@ logs/
 # --- Website downloads
 browser-client/media/
 tempfile
+html-parser/docs/*
 

@@ -1,0 +1,6 @@
+This is a placeholder for font files.
+In a real site, this folder would contain:
+- custom-font.woff2
+- custom-font.woff
+
+These are referenced in css/fonts.css for testing @font-face parsing.

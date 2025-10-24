@@ -1,0 +1,18 @@
+/* About page specific styles */
+.about-section {
+    padding: 2rem;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.team-member {
+    text-align: center;
+    padding: 1rem;
+}
+
+.team-member img {
+    border-radius: 50%;
+    width: 150px;
+    height: 150px;
+}

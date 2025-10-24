@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Site - Home</title>
+    
+    <!-- Standard relative path -->
+    <link rel="stylesheet" href="css/main.css">
+    
+    <!-- Another CSS with different path style -->
+    <link rel="stylesheet" href="./css/layout.css" />
+    
+    <!-- CSS with single quotes -->
+    <link rel='stylesheet' href='css/theme.css'>
+    
+    <!-- Inline style (should be ignored) -->
+    <style>
+        body { margin: 0; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Welcome to Test Site</h1>
+        <nav>
+            <a href="about.html">About</a>
+            <a href="./contact.html">Contact</a>
+        </nav>
+    </header>
+
+    <main>
+        <section>
+            <h2>Main Content</h2>
+            <p>This is a test page with multiple CSS and JS dependencies.</p>
+            <img src="images/logo.png" alt="Logo">
+            <img src="./images/banner.jpg" alt="Banner" />
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2025 Test Site</p>
+    </footer>
+
+    <!-- Standard script tag -->
+    <script src="js/main.js"></script>
+    
+    <!-- Script with different path style -->
+    <script src="./js/utils.js"></script>
+    
+    <!-- Script with single quotes -->
+    <script src='js/app.js'></script>
+    
+    <!-- External script (should be handled differently or ignored) -->
+    <script src="https://cdn.example.com/library.js"></script>
+    
+    <!-- Inline script (should be ignored) -->
+    <script>
+        console.log('Inline script');
+    </script>
+</body>
+</html>

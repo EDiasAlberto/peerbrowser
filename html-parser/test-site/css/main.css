@@ -1,0 +1,43 @@
+/* Main stylesheet */
+* {
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Arial', sans-serif;
+    line-height: 1.6;
+    color: #333;
+    background-color: #f4f4f4;
+}
+
+/* CSS with background image - edge case! */
+.hero {
+    background-image: url('../images/hero-bg.jpg');
+    background-size: cover;
+}
+
+/* Another image reference */
+.icon {
+    background: url("../images/icons/star.png") no-repeat;
+}
+
+/* Edge case: url with single quotes */
+.banner {
+    background: url('../images/banner.jpg');
+}
+
+/* Import statement - edge case! */
+@import url('fonts.css');
+@import url("typography.css");
+
+header {
+    background: #35424a;
+    color: white;
+    padding: 1rem;
+}
+
+nav a {
+    color: white;
+    text-decoration: none;
+    margin-right: 1rem;
+}

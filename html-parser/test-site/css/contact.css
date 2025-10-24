@@ -1,0 +1,18 @@
+/* Contact page specific styles */
+.contact-info {
+    display: flex;
+    gap: 2rem;
+    margin: 2rem 0;
+}
+
+.contact-card {
+    flex: 1;
+    padding: 1.5rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+}
+
+.contact-card h3 {
+    margin-top: 0;
+    color: #35424a;
+}

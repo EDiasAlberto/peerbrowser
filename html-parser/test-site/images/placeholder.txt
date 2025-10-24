@@ -1,0 +1,9 @@
+This is a placeholder for image files.
+In a real site, this folder would contain:
+- logo.png
+- banner.jpg
+- hero-bg.jpg
+- icons/star.png
+
+For testing purposes, these references exist in the HTML/CSS but actual image files are not created.
+Your parser should detect these references even though the files don't exist yet.
