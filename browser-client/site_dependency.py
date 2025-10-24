@@ -1,6 +1,7 @@
 from bs4 import BeautifulSoup
 from bs4.element import Tag
 from dataclasses import dataclass
+import os
 
 REMOTE_FILE_PROTOCOLS = ("https://", "http://")
 CSS_IMPORT_SYNTAX = "@import"
@@ -31,7 +32,7 @@ class SiteDependencies:
             while line != "":
                 if self.css_is_import(line) or self.css_is_linked_statement(line):
                     import_path = self.css_get_import_path(line)
-                    full_import_path = os.path.join(parent_folder, full_import_path)
+                    full_import_path = os.path.join(parent_folder, import_path)
                     link_or_import_statements.append(full_import_path)
                 line = fp.readline()
         return link_or_import_statements
@@ -55,6 +56,17 @@ class SiteDependencies:
     def get_all_js_dependencies(self, filename: str, parent_folder: str) -> list[str]:
         # TODO: implement js parsing to find imports
         print(f"Checking {filename} for import statements")
+        return []
+
+    def get_all_dependencies(self, filename: str, parent_folder: str) -> list[str]:
+        if filename.endswith(".html"):
+            return self.get_all_html_dependencies(filename, parent_folder)
+        elif filename.endswith(".css"):
+            return self.get_all_css_dependencies(filename, parent_folder)
+        elif filename.endswith(".js"):
+            return self.get_all_js_dependencies(filename, parent_folder)
+        else:
+            return []
 
     def tidy_dependency_paths(self, parent_folder: str, dependencies: list[str]) -> list[str]:
         tidied_dependencies = []

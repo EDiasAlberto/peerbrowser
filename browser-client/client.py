@@ -67,10 +67,13 @@ def load_page(path: str):
         print("BIG PROBLEM")
         return
     full_filepath = os.path.join(MEDIA_DOWNLOAD_DIR, path)
-    print(full_filepath)
     if os.path.isfile(full_filepath):
-        deps = file_parser.get_all_html_dependencies(full_filepath)
+        parent_folder = os.path.dirname(full_filepath)
+        deps = file_parser.get_all_dependencies(full_filepath, parent_folder)
+        if deps is None:
+            print(full_filepath)
         missing_deps = [x for x in deps if not os.path.isfile(x)]
+        print(missing_deps)
         if (len(missing_deps) == 0):
             with open(full_filepath, "r") as html:
                 return html.read()
@@ -79,7 +82,7 @@ def load_page(path: str):
             print(dep)
             return f"<h3> Fetching missing dependencies: {missing_deps} </h3>"
     else:
-        download_page(path)
+        #download_page(path)
         return f"<h3> Fetching page {full_filepath} </h3>"
 
 @app.route("/get-page", methods=["GET"])
