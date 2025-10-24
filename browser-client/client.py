@@ -8,6 +8,7 @@ import time  # temporary solution
 from utils import generate_hash, TRACKER_SERVER_URL, MEDIA_DOWNLOAD_DIR
 from holepunch_server import UDPClient
 from tracker_api import APIClient
+from site_dependency import SiteDependencies
 
 load_dotenv()
 
@@ -15,8 +16,9 @@ def on_file_download(filepath: str):
     return redirect(f"/load_peer_page/{filepath}")
 
 udpClient = UDPClient(server_host=os.getenv("MATCHMAKER_HOST"), server_port=os.getenv("MATCHMAKER_PORT"), completed_download_callback=on_file_download)
-udpClient.start()
+#udpClient.start()
 apiClient = APIClient(base_url=TRACKER_SERVER_URL)
+file_parser = SiteDependencies()
 app = Flask(__name__)
 
 # --- Shared nav HTML for both pages ---
@@ -65,9 +67,17 @@ def load_page(path: str):
         print("BIG PROBLEM")
         return
     full_filepath = os.path.join(MEDIA_DOWNLOAD_DIR, path)
+    print(full_filepath)
     if os.path.isfile(full_filepath):
-        with open(full_filepath, "r") as html:
-            return html.read()
+        deps = file_parser.get_all_html_dependencies(full_filepath)
+        missing_deps = [x for x in deps if not os.path.isfile(x)]
+        if (len(missing_deps) == 0):
+            with open(full_filepath, "r") as html:
+                return html.read()
+        for dep in missing_deps:
+            #download_page(dep)
+            print(dep)
+            return f"<h3> Fetching missing dependencies: {missing_deps} </h3>"
     else:
         download_page(path)
         return f"<h3> Fetching page {full_filepath} </h3>"
