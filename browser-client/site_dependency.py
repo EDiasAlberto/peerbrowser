@@ -43,6 +43,7 @@ class SiteDependencies:
         code_dependencies = soup.find_all(["link", "script"])
         filtered_dependencies = []
         for tag in code_dependencies: 
+            full_import_path = None
             if tag.name == "link":
                 if not self.html_is_inline_or_remote_ref(tag, "href"):
                     full_import_path = os.path.join(parent_folder, tag["href"])
